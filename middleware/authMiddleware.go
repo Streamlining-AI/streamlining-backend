@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	helper "streamlining-backend/helpers"
+	helper "github.com/Streamlining-AI/streamlining-backend/helpers"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,23 +12,20 @@ import (
 // Authz validates token and authorizes users
 func Authentication() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		clientToken := c.Request.Header.Get("token")
+		clientToken, err := c.Cookie("token")
 		if clientToken == "" {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("No Authorization header provided")})
 			c.Abort()
 			return
 		}
-
-		claims, err := helper.ValidateToken(clientToken)
-		if err != "" {
+		claims, errr := helper.ValidateToken(clientToken)
+		if errr != "" {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 			c.Abort()
 			return
 		}
 
 		c.Set("email", claims.Email)
-		c.Set("first_name", claims.First_name)
-		c.Set("last_name", claims.Last_name)
 		c.Set("uid", claims.Uid)
 
 		c.Next()

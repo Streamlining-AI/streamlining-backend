@@ -11,10 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 
-	"streamlining-backend/database"
+	"github.com/Streamlining-AI/streamlining-backend/database"
 
-	helper "streamlining-backend/helpers"
-	"streamlining-backend/models"
+	helper "github.com/Streamlining-AI/streamlining-backend/helpers"
+	"github.com/Streamlining-AI/streamlining-backend/models"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -22,10 +22,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var userCollectionGithub *mongo.Collection = database.OpenCollection(database.Client, "userGithub")
 var userCollection *mongo.Collection = database.OpenCollection(database.Client, "user")
 var validate = validator.New()
 
-// HashPassword is used to encrypt the password before it is stored in the DB
 func HashPassword(password string) string {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
 	if err != nil {
@@ -35,7 +35,6 @@ func HashPassword(password string) string {
 	return string(bytes)
 }
 
-// VerifyPassword checks the input password while verifying it with the passward in the DB.
 func VerifyPassword(userPassword string, providedPassword string) (bool, string) {
 	err := bcrypt.CompareHashAndPassword([]byte(providedPassword), []byte(userPassword))
 	check := true
@@ -50,11 +49,12 @@ func VerifyPassword(userPassword string, providedPassword string) (bool, string)
 }
 
 // CreateUser is the api used to tget a single user
-func SignUp() gin.HandlerFunc {
+func Regsiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var user models.User
 
+		defer cancel()
 		if err := c.BindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -77,47 +77,39 @@ func SignUp() gin.HandlerFunc {
 		password := HashPassword(*user.Password)
 		user.Password = &password
 
-		count, err = userCollection.CountDocuments(ctx, bson.M{"phone": user.Phone})
-		defer cancel()
-		if err != nil {
-			log.Panic(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the phone number"})
-			return
-		}
-
 		if count > 0 {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "this email or phone number already exists"})
 			return
 		}
 
-		user.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		user.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		user.Created_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		user.Updated_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		user.ID = primitive.NewObjectID()
 		user.User_id = user.ID.Hex()
-		token, refreshToken, _ := helper.GenerateAllTokens(*user.Email, *user.First_name, *user.Last_name, user.User_id)
+		token, refreshToken, err := helper.GenerateAllTokens(*user.Email, user.User_id)
 		user.Token = &token
 		user.Refresh_token = &refreshToken
 
 		resultInsertionNumber, insertErr := userCollection.InsertOne(ctx, user)
+		defer cancel()
 		if insertErr != nil {
 			msg := fmt.Sprintf("User item was not created")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
 		}
-		defer cancel()
 
 		c.JSON(http.StatusOK, resultInsertionNumber)
 
 	}
 }
 
-// Login is the api used to tget a single user
 func Login() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var user models.User
 		var foundUser models.User
 
+		defer cancel()
 		if err := c.BindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -137,11 +129,101 @@ func Login() gin.HandlerFunc {
 			return
 		}
 
-		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.Email, *foundUser.First_name, *foundUser.Last_name, foundUser.User_id)
+		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.Email, foundUser.User_id)
 
 		helper.UpdateAllTokens(token, refreshToken, foundUser.User_id)
-
+		c.SetCookie("token", token, 3600, "/", "127.0.0.1", false, true)
 		c.JSON(http.StatusOK, foundUser)
 
+	}
+}
+
+func Logout() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+		c.SetCookie("token", "", -1, "/", "127.0.0.1", false, true)
+		c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
+
+	}
+}
+
+func RegisterGithub(userName string, userId string) error {
+	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+
+	var user models.UserGithub
+	var err error
+	user.ID = primitive.NewObjectID()
+	user.User_id = userId
+	user.Username = userName
+	user.Created_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	user.Updated_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+
+	defer cancel()
+	if err != nil {
+		return err
+	}
+
+	_, insertErr := userCollectionGithub.InsertOne(ctx, user)
+	defer cancel()
+	if insertErr != nil {
+		return insertErr
+	}
+
+	return nil
+}
+
+func GithubLoginHandler() gin.HandlerFunc {
+
+	return func(c *gin.Context) {
+		githubClientID := helper.GetGithubClientID()
+
+		redirectURL := fmt.Sprintf(
+			"https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&scope=repo,user",
+			githubClientID,
+			"http://localhost:3000/login/github/callback",
+		)
+		c.JSON(http.StatusOK, gin.H{"redirectURL": redirectURL})
+	}
+}
+
+func GithubCallbackHandler() gin.HandlerFunc {
+
+	return func(c *gin.Context) {
+		var resp models.GithubRequestBody
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+
+		defer cancel()
+		if err := c.BindJSON(&resp); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": resp.Username})
+
+		defer cancel()
+		if err != nil {
+			msg := fmt.Sprintf("error occured while checking for the username")
+			c.JSON(http.StatusBadRequest, msg)
+			return
+		}
+
+		if count == 0 {
+			err = RegisterGithub(resp.Username, resp.UserId)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				return
+			}
+		}
+
+		// githubAccessToken := helper.GetGithubAccessToken(resp.Code)
+		githubAccessToken := "12345"
+		token, err := helper.EncodeToken(githubAccessToken, resp.UserId)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
+		}
+		// claims, _ := helper.DecodeToken(token)
+		c.SetCookie("token", token, 3600, "/", "127.0.0.1", false, true)
+		c.JSON(http.StatusOK, gin.H{"token": token})
 	}
 }
