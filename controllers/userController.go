@@ -1,9 +1,13 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"strings"
 
 	"net/http"
 	"time"
@@ -198,7 +202,22 @@ func GithubCallbackHandler() gin.HandlerFunc {
 			return
 		}
 
-		count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": resp.Username})
+		githubAccessToken := helper.GetGithubAccessToken(resp.Code)
+		githubData := GetGithubData(githubAccessToken)
+
+		var prettyJSON bytes.Buffer
+		parserr := json.Indent(&prettyJSON, []byte(githubData), "", "\t")
+		if parserr != nil {
+			log.Panic("JSON parse error")
+		}
+		userData := strings.Split(githubData, ",")
+		userName := strings.Split(userData[0], ":")
+		userName1 := strings.Trim(userName[1], `"`)
+
+		userId := strings.Split(userData[1], ":")
+		userId1 := userId[0]
+
+		count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": userName1})
 
 		defer cancel()
 		if err != nil {
@@ -208,16 +227,14 @@ func GithubCallbackHandler() gin.HandlerFunc {
 		}
 
 		if count == 0 {
-			err = RegisterGithub(resp.Username, resp.UserId)
+			err = RegisterGithub(userName1, userId1)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 				return
 			}
 		}
 
-		// githubAccessToken := helper.GetGithubAccessToken(resp.Code)
-		githubAccessToken := "12345"
-		token, err := helper.EncodeToken(githubAccessToken, resp.UserId)
+		token, err := helper.EncodeToken(githubAccessToken, userId1)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 			return
@@ -226,4 +243,34 @@ func GithubCallbackHandler() gin.HandlerFunc {
 		c.SetCookie("token", token, 3600, "/", "127.0.0.1", false, true)
 		c.JSON(http.StatusOK, gin.H{"token": token})
 	}
+}
+
+func GetGithubData(accessToken string) string {
+	// Get request to a set URL
+	req, reqerr := http.NewRequest(
+		"GET",
+		"https://api.github.com/user",
+		nil,
+	)
+	if reqerr != nil {
+		log.Panic("API Request creation failed")
+	}
+
+	// Set the Authorization header before sending the request
+	// Authorization: token XXXXXXXXXXXXXXXXXXXXXXXXXXX
+	authorizationHeaderValue := fmt.Sprintf("token %s", accessToken)
+	req.Header.Set("Authorization", authorizationHeaderValue)
+
+	// Make the request
+	resp, resperr := http.DefaultClient.Do(req)
+	if resperr != nil {
+		log.Panic("Request failed")
+	}
+
+	// Read the response as a byte slice
+	respbody, _ := ioutil.ReadAll(resp.Body)
+
+	// Convert byte slice to string and return
+	// util.GitClone(accessToken)
+	return string(respbody)
 }

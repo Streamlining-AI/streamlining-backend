@@ -27,7 +27,7 @@ type UserGithub struct {
 }
 
 type GithubRequestBody struct {
-	Code     string `json:"Code"`
-	Username string `json:"Username"`
-	UserId   string `json:"UserId"`
+	Code string `json:"Code"`
+	// Username string `json:"Username"`
+	// UserId   string `json:"UserId"`
 }
