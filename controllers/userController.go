@@ -136,7 +136,9 @@ func Login() gin.HandlerFunc {
 		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.Email, foundUser.User_id)
 
 		helper.UpdateAllTokens(token, refreshToken, foundUser.User_id)
-		c.SetCookie("token", token, 3600, "/", "127.0.0.1", false, true)
+		c.SetSameSite(http.SameSiteNoneMode)
+		c.SetCookie("token", token, 3600, "/", "localhost:3000", true, true)
+
 		c.JSON(http.StatusOK, foundUser)
 
 	}
@@ -145,7 +147,7 @@ func Login() gin.HandlerFunc {
 func Logout() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		c.SetCookie("token", "", -1, "/", "127.0.0.1", false, true)
+		c.SetCookie("token", "", -1, "/", "localhost:3000", false, true)
 		c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
 
 	}
@@ -184,7 +186,7 @@ func GithubLoginHandler() gin.HandlerFunc {
 		redirectURL := fmt.Sprintf(
 			"https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&scope=repo,user",
 			githubClientID,
-			"http://localhost:3000/login/github/callback",
+			"https://localhost:3000/login/github/callback",
 		)
 		c.JSON(http.StatusOK, gin.H{"redirectURL": redirectURL})
 	}
