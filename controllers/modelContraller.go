@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -19,6 +20,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"gopkg.in/yaml.v2"
 )
 
 var modelCollection *mongo.Collection = database.OpenCollection(database.Client, "model")
@@ -35,7 +37,7 @@ func HandlerUpload() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
 		var body Message
-
+		defer cancel()
 		if err := c.BindJSON(&body); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -61,7 +63,7 @@ func HandlerUpload() gin.HandlerFunc {
 			c.JSON(500, gin.H{"error": "error"})
 			return
 		}
-		dockerImageId, dockerUrl := PushToDocker(dir,body.Name)
+		dockerImageId, dockerUrl := PushToDocker(dir, body.Name)
 
 		var model models.Model
 		model.ID = primitive.NewObjectID()
@@ -79,6 +81,10 @@ func HandlerUpload() gin.HandlerFunc {
 		if err != nil {
 			c.JSON(500, gin.H{"err": "error"})
 		}
+
+		CreateDeploy(dockerUrl, body.Name)
+		CreateService(body.Name)
+		DeployKube()
 		c.JSON(200, gin.H{"message": "Clone Successful"})
 
 	}
@@ -158,4 +164,194 @@ func PushToDocker(folderName string, name string) (string, string) {
 	dockerOutput = string(cmd4)
 	fmt.Println(dockerOutput)
 	return dockerImageId, ip + "/" + dockerImageId
+}
+
+func CreateDeploy(URL string, Name string) {
+	type MetadataStruct struct {
+		Name string `yaml:"name"`
+	}
+
+	type MatchLabelsStruct struct {
+		App string `yaml:"app"`
+	}
+
+	// ==============================================
+	type SelectorStruct struct {
+		MatchLabels MatchLabelsStruct `yaml:"matchLabels"`
+	}
+
+	type LabelsStruct struct {
+		App string `yaml:"app"`
+	}
+
+	type TemplateMetadataStruct struct {
+		Labels LabelsStruct `yaml:"labels"`
+	}
+
+	// ==============================================
+
+	type PortsStruct struct {
+		ContainerPort int `yaml:"containerPort"`
+	}
+
+	type ContainersStruct struct {
+		Name  string `yaml:"name"`
+		Image string `yaml:"image"`
+		Ports []PortsStruct
+	}
+
+	// ==============================================
+
+	type ImagePullSecretsStruct struct {
+		Name string `yaml:"name"`
+	}
+
+	type TemplateSpecStruct struct {
+		Containers       []ContainersStruct       `yaml:"containers"`
+		ImagePullSecrets []ImagePullSecretsStruct `yaml:"imagePullSecrets"`
+	}
+
+	type TemplateStruct struct {
+		Metadata TemplateMetadataStruct `yaml:"metadata"`
+		Spec     TemplateSpecStruct     `yaml:"spec"`
+	}
+
+	type SpecStruct struct {
+		Replicas int            `yaml:"replicas"`
+		Selector SelectorStruct `yaml:"selector"`
+		Template TemplateStruct `yaml:"template"`
+	}
+
+	type Deploy struct {
+		Kind       string         `yaml:"kind"`
+		ApiVersion string         `yaml:"apiVersion"`
+		Metadata   MetadataStruct `yaml:"metadata"`
+		Spec       SpecStruct     `yaml:"spec"`
+	}
+	s1 := Deploy{
+		Kind:       "Deployment",
+		ApiVersion: "apps/v1",
+		Metadata: MetadataStruct{
+			Name: Name + "-service",
+		},
+		Spec: SpecStruct{
+			Replicas: 1,
+			Selector: SelectorStruct{
+				MatchLabels: MatchLabelsStruct{
+					App: Name,
+				},
+			},
+			Template: TemplateStruct{
+				Metadata: TemplateMetadataStruct{
+					Labels: LabelsStruct{
+						App: Name,
+					},
+				},
+				Spec: TemplateSpecStruct{
+					Containers: []ContainersStruct{{
+						Name:  Name,
+						Image: URL,
+						Ports: []PortsStruct{{
+							ContainerPort: 5000,
+						}},
+					}},
+					ImagePullSecrets: []ImagePullSecretsStruct{
+						{
+							Name: "regcred",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	yamlData1, err := yaml.Marshal(&s1)
+
+	if err != nil {
+		fmt.Printf("Error while Marshaling. %v", err)
+	}
+	err2 := ioutil.WriteFile("Deployment.yaml", yamlData1, 0)
+
+	if err2 != nil {
+
+		log.Fatal(err2)
+	}
+}
+
+func CreateService(Name string) {
+	type LabelsStruct struct {
+		App string `yaml:"app"`
+	}
+
+	type MetadataStruct struct {
+		Name   string       `yaml:"name"`
+		Labels LabelsStruct `yaml:"labels"`
+	}
+
+	type PortsStruct struct {
+		Port       int    `yaml:"port"`
+		TargetPort int    `yaml:"targetPort"`
+		Protocol   string `yaml:"protocol"`
+	}
+
+	type SelectorStruct struct {
+		App string `yaml:"app"`
+	}
+
+	type SpecStruct struct {
+		Type     string `yaml:"type"`
+		Ports    []PortsStruct
+		Selector SelectorStruct `yaml:"selector"`
+	}
+
+	type Service struct {
+		ApiVersion string         `yaml:"apiVersion"`
+		Kind       string         `yaml:"kind"`
+		Metadata   MetadataStruct `yaml:"metadata"`
+		Spec       SpecStruct     `yaml:"spec"`
+	}
+
+	s2 := Service{
+		ApiVersion: "v1",
+		Kind:       "Service",
+		Metadata: MetadataStruct{
+			Name: Name + "-service",
+			Labels: LabelsStruct{
+				App: Name,
+			},
+		},
+		Spec: SpecStruct{
+			Type: "LoadBalancer",
+			Ports: []PortsStruct{
+				{
+					Port:       5000,
+					TargetPort: 5000,
+					Protocol:   "TCP",
+				},
+			},
+			Selector: SelectorStruct{
+				App: Name,
+			},
+		},
+	}
+
+	yamlData1, err := yaml.Marshal(&s2)
+
+	if err != nil {
+		fmt.Printf("Error while Marshaling. %v", err)
+	}
+	err2 := ioutil.WriteFile("Service.yaml", yamlData1, 0)
+
+	if err2 != nil {
+
+		log.Fatal(err2)
+	}
+}
+
+func DeployKube() {
+	cmd5, err := exec.Command("kubectl", "apply", "-f", ".").Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(cmd5)
 }

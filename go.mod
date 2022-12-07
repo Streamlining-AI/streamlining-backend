@@ -12,6 +12,7 @@ require (
 	github.com/heroku/x v0.0.52
 	github.com/joho/godotenv v1.4.0
 	go.mongodb.org/mongo-driver v1.10.2
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -44,7 +45,6 @@ require (
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require (
