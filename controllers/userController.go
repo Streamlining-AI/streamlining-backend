@@ -146,8 +146,8 @@ func Login() gin.HandlerFunc {
 
 func Logout() gin.HandlerFunc {
 	return func(c *gin.Context) {
-
-		c.SetCookie("token", "", -1, "/", "localhost:3000", false, true)
+		c.SetSameSite(http.SameSiteNoneMode)
+		c.SetCookie("token", "", -1, "/", "localhost:3000", true, true)
 		c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
 
 	}
@@ -212,12 +212,18 @@ func GithubCallbackHandler() gin.HandlerFunc {
 		if parserr != nil {
 			log.Panic("JSON parse error")
 		}
+
+		if strings.Contains(string(prettyJSON.Bytes()), `"message": "Bad credentials"`) {
+			println("Bad Credentials")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Bad Credentials"})
+			return
+		}
 		userData := strings.Split(githubData, ",")
 		userName := strings.Split(userData[0], ":")
 		userName1 := strings.Trim(userName[1], `"`)
 
 		userId := strings.Split(userData[1], ":")
-		userId1 := userId[0]
+		userId1 := userId[1]
 
 		count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": userName1})
 
@@ -229,12 +235,23 @@ func GithubCallbackHandler() gin.HandlerFunc {
 		}
 
 		if count == 0 {
+
 			err = RegisterGithub(userName1, userId1)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 				return
 			}
+
 		}
+
+		// var foundUser models.UserGithub
+
+		// err = userCollection.FindOne(ctx, bson.M{"user_id": userId1}).Decode(&foundUser)
+		// defer cancel()
+		// if err != nil {
+		// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found"})
+		// 	return
+		// }
 
 		token, err := helper.EncodeToken(githubAccessToken, userId1)
 		if err != nil {
@@ -242,8 +259,9 @@ func GithubCallbackHandler() gin.HandlerFunc {
 			return
 		}
 		// claims, _ := helper.DecodeToken(token)
-		c.SetCookie("token", token, 3600, "/", "127.0.0.1", false, true)
-		c.JSON(http.StatusOK, gin.H{"token": token})
+		c.SetSameSite(http.SameSiteNoneMode)
+		c.SetCookie("token", token, 3600, "/", "localhost:3000", true, true)
+		c.JSON(http.StatusOK, gin.H{"token": token, "ID": userId1, "username": userName1})
 	}
 }
 
