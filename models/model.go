@@ -17,3 +17,8 @@ type Model struct {
 	Url        string             `json:"Url"`
 	PredictUrl string             `json:"PredictUrl"`
 }
+
+type PredictBody struct {
+	Id    string `json:"id"`
+	Input string `json:"input"`
+}

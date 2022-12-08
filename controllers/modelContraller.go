@@ -1,10 +1,13 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
+	gohttp "net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +24,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"gopkg.in/yaml.v2"
 )
 
@@ -365,13 +369,36 @@ func DeployKube(Name string) string {
 	return string(cmd6) + "/predictions"
 }
 
-type AllModels struct {
-	Models []models.Model
-}
-
 func GetAllModel() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var foundModels []models.Model
+		findOptions := options.Find()
 
+		cur, err := modelCollection.Find(context.TODO(), bson.D{{}}, findOptions)
+		if err != nil {
+			println(err)
+			return
+		}
+
+		for cur.Next(context.TODO()) {
+			//Create a value into which the single document can be decoded
+			var elem models.Model
+			err := cur.Decode(&elem)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			foundModels = append(foundModels, elem)
+		}
+		if err := cur.Err(); err != nil {
+			log.Fatal(err)
+		}
+
+		//Close the cursor once finished
+		cur.Close(context.TODO())
+
+		fmt.Printf("Found multiple documents: %+v\n", foundModels)
+		c.JSON(200, foundModels)
 	}
 }
 
@@ -390,5 +417,74 @@ func GetModelById() gin.HandlerFunc {
 
 		c.JSON(200, foundModel)
 
+	}
+}
+
+func Predict() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var resp models.PredictBody
+
+		if err := c.BindJSON(&resp); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		var foundModel models.Model
+		var foundModel1 models.Model
+		err := modelCollection.FindOne(context.TODO(), bson.M{"_id": resp.Id}).Decode(&foundModel)
+		if err != nil {
+			println(err)
+			return
+		}
+
+		output, err := json.Marshal(foundModel)
+		if err != nil {
+			panic(err)
+		}
+
+		json.Unmarshal(output, &foundModel1)
+		fmt.Println(foundModel1.PredictUrl)
+		data := map[string]map[string]string{
+			"input": {
+				"text": resp.Input,
+			},
+		}
+		requestJSON, _ := json.Marshal(data)
+
+		fmt.Println(string(requestJSON))
+		// POST request to set URL
+		req, reqerr := gohttp.NewRequest(
+			"POST",
+			foundModel1.PredictUrl,
+			bytes.NewBuffer(requestJSON),
+		)
+
+		if reqerr != nil {
+			log.Panic("Request creation failed")
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+
+		// Get the response
+		respPredict, resperr := gohttp.DefaultClient.Do(req)
+		if resperr != nil {
+			log.Panic("Request failed")
+		}
+
+		// Response body converted to stringified JSON
+		respbody, _ := ioutil.ReadAll(respPredict.Body)
+
+		// Represents the response received from Github
+		type PredictOutput struct {
+			Status string `json:"status"`
+			Output string `json:"output"`
+		}
+
+		// Convert stringified JSON to a struct object of type githubAccessTokenResponse
+		var predictResp PredictOutput
+		json.Unmarshal(respbody, &predictResp)
+
+		c.JSON(200, predictResp)
+		c.JSON(200, resp)
 	}
 }

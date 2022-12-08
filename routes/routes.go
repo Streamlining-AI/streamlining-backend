@@ -13,4 +13,5 @@ func UserRoutes(incomingRoutes *gin.Engine) {
 	incomingRoutes.GET("/users/login/github", controller.GithubLoginHandler())
 	incomingRoutes.POST("/users/login/github/callback", controller.GithubCallbackHandler())
 	incomingRoutes.GET("/model/:id", controller.GetModelById())
+	incomingRoutes.GET("/model/", controller.GetAllModel())
 }
