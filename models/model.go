@@ -15,4 +15,5 @@ type Model struct {
 	Updated_at time.Time          `json:"updated_at"`
 	Input      string             `json:"Input"`
 	Url        string             `json:"Url"`
+	PredictUrl string             `json:"PredictUrl"`
 }

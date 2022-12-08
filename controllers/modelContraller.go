@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"gopkg.in/yaml.v2"
@@ -73,6 +74,10 @@ func HandlerUpload() gin.HandlerFunc {
 		model.Url = dockerUrl
 		model.Created_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		model.Updated_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+
+		CreateDeploy(dockerUrl, body.Name)
+		CreateService(body.Name)
+		model.PredictUrl = DeployKube(body.Name)
 		_, insertErr := modelCollection.InsertOne(ctx, model)
 		defer cancel()
 		if insertErr != nil {
@@ -81,10 +86,6 @@ func HandlerUpload() gin.HandlerFunc {
 		if err != nil {
 			c.JSON(500, gin.H{"err": "error"})
 		}
-
-		CreateDeploy(dockerUrl, body.Name)
-		CreateService(body.Name)
-		DeployKube()
 		c.JSON(200, gin.H{"message": "Clone Successful"})
 
 	}
@@ -348,10 +349,46 @@ func CreateService(Name string) {
 	}
 }
 
-func DeployKube() {
+func DeployKube(Name string) string {
 	cmd5, err := exec.Command("kubectl", "apply", "-f", ".").Output()
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(cmd5)
+
+	cmd6, err := exec.Command("minikube", "service", "--url", Name+"-service").Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(cmd6)
+
+	return string(cmd6) + "/predictions"
+}
+
+type AllModels struct {
+	Models []models.Model
+}
+
+func GetAllModel() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+	}
+}
+
+func GetModelById() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		paramID := c.Param("id")
+		var foundModel models.Model
+
+		err := modelCollection.FindOne(ctx, bson.M{"_id": paramID}).Decode(&foundModel)
+		defer cancel()
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Model ID is invalid"})
+			return
+		}
+
+		c.JSON(200, foundModel)
+
+	}
 }
