@@ -232,7 +232,7 @@ func CreateDeploy(URL string, Name string) {
 		Kind:       "Deployment",
 		ApiVersion: "apps/v1",
 		Metadata: MetadataStruct{
-			Name: Name + "-service",
+			Name: Name,
 		},
 		Spec: SpecStruct{
 			Replicas: 1,
@@ -270,7 +270,7 @@ func CreateDeploy(URL string, Name string) {
 	if err != nil {
 		fmt.Printf("Error while Marshaling. %v", err)
 	}
-	err2 := ioutil.WriteFile("Deployment.yaml", yamlData1, 0)
+	err2 := ioutil.WriteFile("Deployment.yaml", yamlData1, 0777)
 
 	if err2 != nil {
 
@@ -340,7 +340,7 @@ func CreateService(Name string) {
 	if err != nil {
 		fmt.Printf("Error while Marshaling. %v", err)
 	}
-	err2 := ioutil.WriteFile("Service.yaml", yamlData1, 0)
+	err2 := ioutil.WriteFile("Service.yaml", yamlData1, 0777)
 
 	if err2 != nil {
 
