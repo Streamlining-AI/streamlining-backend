@@ -485,6 +485,5 @@ func Predict() gin.HandlerFunc {
 		json.Unmarshal(respbody, &predictResp)
 
 		c.JSON(200, predictResp)
-		c.JSON(200, resp)
 	}
 }
