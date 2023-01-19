@@ -22,3 +22,10 @@ type PredictBody struct {
 	Id    string `json:"id"`
 	Input string `json:"input"`
 }
+
+type Message struct {
+	Url   string `json:"url"`
+	Code  string `json:"code"`
+	Name  string `json:"name"`
+	Input string `json:"input"`
+}
