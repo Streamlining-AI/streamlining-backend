@@ -51,6 +51,7 @@ require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/gofiber/fiber v1.14.6
 	github.com/golang/snappy v0.0.1 // indirect
+	github.com/graphql-go/graphql v0.8.0
 	github.com/klauspost/compress v1.15.0 // indirect
 	github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe // indirect
 	github.com/pkg/errors v0.9.1 // indirect
