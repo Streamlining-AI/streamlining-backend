@@ -4,6 +4,7 @@ import (
 	"log"
 
 	controller "github.com/Streamlining-AI/streamlining-backend/controllers"
+
 	// middleware "github.com/Streamlining-AI/streamlining-backend/middleware"
 	routes "github.com/Streamlining-AI/streamlining-backend/routes"
 	"github.com/gin-contrib/cors"
@@ -32,7 +33,7 @@ func main() {
 	}))
 
 	routes.UserRoutes(router)
-
+	routes.ModelRoutes(router)
 	router.POST("/upload/clone", controller.HandlerUpload())
 	// router.Use(middleware.Authentication())
 

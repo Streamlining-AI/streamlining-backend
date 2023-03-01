@@ -272,7 +272,7 @@ func CreateService(Name string) {
 	}
 }
 
-func DeployKube(Name string) string {
+func DeployKube(Name string) (string, string) {
 	DeployToKubeCmd, err := exec.Command("kubectl", "apply", "-f", ".").Output()
 	if err != nil {
 		log.Fatal(err)
@@ -285,5 +285,5 @@ func DeployKube(Name string) string {
 	}
 	fmt.Println(GetPredictUrlCmd)
 
-	return string(GetPredictUrlCmd) + "/predictions"
+	return string(GetPredictUrlCmd), string(GetPredictUrlCmd) + "/predictions"
 }

@@ -30,6 +30,17 @@ type Message struct {
 	Input string `json:"input"`
 }
 
+type ModelDataTransfer struct {
+	Name        string `json:"name" validate:"required,min=6"`
+	Type        string `json:"type" validate:"email,required"`
+	IsVisible   bool   `json:"is_visible"`
+	GithubURL   string `json:"github_url"`
+	Description string `json:"description"`
+	UserID      string `json:"user_id"`
+	OutputType  string `json:"output_type"`
+	GithubCode  string `json:"github_code"`
+}
+
 type ModelData struct {
 	ModelID            primitive.ObjectID `bson:"model_id"`
 	Name               string             `json:"name" validate:"required,min=6"`
@@ -45,11 +56,10 @@ type ModelData struct {
 }
 
 type ModelImage struct {
-	ImageID            primitive.ObjectID `bson:"image_id"`
-	DockerImageID      string             `json:"docker_image_id"`
-	DockerRegistryName string             `json:"docker_registry_name"`
-	DockeyRegistryURL  string             `json:"docker_registry_url"`
-	ModelID            primitive.ObjectID `bson:"model_id"`
+	ImageID           primitive.ObjectID `bson:"image_id"`
+	DockerImageID     string             `json:"docker_image_id"`
+	DockeyRegistryURL string             `json:"docker_registry_url"`
+	ModelID           primitive.ObjectID `bson:"model_id"`
 }
 
 type ModelPod struct {
@@ -88,15 +98,18 @@ type ModelOutputData struct {
 	ModelOutputID  primitive.ObjectID `bson:"model_output_id"`
 	Output         string             `json:"output"`
 	CreatedAt      time.Time          `json:"created_at"`
-	ModelInputData []ModelInputData   `json:"model_input_data"`
+	ModelInputData ModelInputData     `json:"model_input_data"`
+	ModelID        primitive.ObjectID `bson:"model_id"`
 }
 
 type ModelInputData struct {
-	ModelInputDataID     primitive.ObjectID     `bson:"model_input_data_id"`
-	ModelInputDataDetail []ModelInputDataDetail `json:"model_input_data_detail"`
+	ModelInputDataID primitive.ObjectID `bson:"model_input_data_id"`
+	DataInputs       []DataInput        `json:"data_inputs"`
+	ModelID          primitive.ObjectID `bson:"model_id"`
+	ImageID          primitive.ObjectID `bson:"image_id"`
 }
 
-type ModelInputDataDetail struct {
+type DataInput struct {
 	Data string `json:"data"`
 	Name string `json:"name"`
 	Type string `json:"type"`

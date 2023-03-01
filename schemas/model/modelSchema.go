@@ -1,10 +1,8 @@
 package schemas
 
 import (
-	"fmt"
-	"math/rand"
-	"time"
-
+	controller "github.com/Streamlining-AI/streamlining-backend/controllers"
+	"github.com/Streamlining-AI/streamlining-backend/models"
 	"github.com/graphql-go/graphql"
 )
 
@@ -19,18 +17,20 @@ var queryType = graphql.NewObject(
 				Type:        ModelDataType,
 				Description: "Get model by id",
 				Args: graphql.FieldConfigArgument{
-					"id": &graphql.ArgumentConfig{
-						Type: graphql.Int,
+					"model_id": &graphql.ArgumentConfig{
+						Type: graphql.String,
 					},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					id, ok := p.Args["id"].(int)
+					id, ok := p.Args["model_id"].(string)
+					var Model models.ModelData
+					var errr error
 					if ok {
-						// Find product Query DB===========================================
-						// return model, nil
-						fmt.Print(id)
+						model, err := controller.GetModelByID(id)
+						Model = model
+						errr = err
 					}
-					return nil, nil
+					return Model, errr
 				},
 			},
 
@@ -42,9 +42,10 @@ var queryType = graphql.NewObject(
 				Description: "Get model list",
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 
+					models := controller.GetAllModel1()
 					// Query from DB ====================================================
 					// return Models, nil ===============================
-					return nil, nil
+					return models, nil
 				},
 			},
 		},
@@ -60,54 +61,44 @@ var mutationType = graphql.NewObject(graphql.ObjectConfig{
 			Type:        ModelDataType,
 			Description: "Create new model",
 			Args: graphql.FieldConfigArgument{
-				"id": &graphql.ArgumentConfig{
-					Type: ObjectID,
-				},
 				"name": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
 				"type": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
-				"isVisible": &graphql.ArgumentConfig{
+				"is_visible": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
 				},
-				"githubURL": &graphql.ArgumentConfig{
+				"github_url": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
 				"description": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
-				"predictRecordCount": &graphql.ArgumentConfig{
-					Type: graphql.Float,
+				"user_id": &graphql.ArgumentConfig{
+					Type: graphql.String,
 				},
-				"createdAt": &graphql.ArgumentConfig{
-					Type: graphql.DateTime,
+				"output_type": &graphql.ArgumentConfig{
+					Type: graphql.String,
 				},
-				"updatedAt": &graphql.ArgumentConfig{
-					Type: graphql.DateTime,
-				},
-				"userID": &graphql.ArgumentConfig{
-					Type: ObjectID,
-				},
-				"outputType": &graphql.ArgumentConfig{
+				"github_code": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
 			},
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-				rand.Seed(time.Now().UnixNano())
-				// Query and Insert
-				// model := Models.MLModel{
-				// 	ModelID:    params.Args["id"].(int),
-				// 	Name:       params.Args["name"].(string),
-				// 	ImageID:    params.Args["imageid"].(string),
-				// 	Input:      params.Args["input"].(string),
-				// 	URL:        params.Args["url"].(string),
-				// 	PredictURL: params.Args["predicturl"].(string),
-				// }
-				// models = append(models, model)
-				// Return data, nil
-				return nil, nil
+				var Model models.ModelDataTransfer
+				Model.Name = params.Args["name"].(string)
+				Model.Type = params.Args["type"].(string)
+				Model.IsVisible = params.Args["is_visible"].(bool)
+				Model.GithubURL = params.Args["github_url"].(string)
+				Model.Description = params.Args["description"].(string)
+				Model.OutputType = params.Args["output_type"].(string)
+				Model.UserID = params.Args["user_id"].(string)
+				GithubCode := params.Args["github_code"].(string)
+				ModelData := controller.HandlerUpload1(Model, GithubCode)
+
+				return ModelData, nil
 			},
 		},
 
@@ -119,7 +110,7 @@ var mutationType = graphql.NewObject(graphql.ObjectConfig{
 			Description: "Update model by id",
 			Args: graphql.FieldConfigArgument{
 				"id": &graphql.ArgumentConfig{
-					Type: ObjectID,
+					Type: graphql.String,
 				},
 				"name": &graphql.ArgumentConfig{
 					Type: graphql.String,
@@ -187,7 +178,7 @@ var mutationType = graphql.NewObject(graphql.ObjectConfig{
 	},
 })
 
-var schema, _ = graphql.NewSchema(
+var Schema, _ = graphql.NewSchema(
 	graphql.SchemaConfig{
 		Query:    queryType,
 		Mutation: mutationType,

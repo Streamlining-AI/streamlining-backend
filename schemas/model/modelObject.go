@@ -35,8 +35,8 @@ var ModelDataType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "ModelData",
 		Fields: graphql.Fields{
-			"id": &graphql.Field{
-				Type: ObjectID,
+			"model_id": &graphql.Field{
+				Type: graphql.String,
 			},
 			"name": &graphql.Field{
 				Type: graphql.String,
@@ -44,28 +44,185 @@ var ModelDataType = graphql.NewObject(
 			"type": &graphql.Field{
 				Type: graphql.String,
 			},
-			"isVisible": &graphql.Field{
+			"is_visible": &graphql.Field{
 				Type: graphql.Boolean,
 			},
-			"githubURL": &graphql.Field{
+			"github_url": &graphql.Field{
 				Type: graphql.String,
 			},
 			"description": &graphql.Field{
 				Type: graphql.String,
 			},
-			"predictRecordCount": &graphql.Field{
+			"predict_record_count": &graphql.Field{
 				Type: graphql.Float,
 			},
-			"createdAt": &graphql.Field{
+			"created_at": &graphql.Field{
 				Type: graphql.DateTime,
 			},
-			"updatedAt": &graphql.Field{
+			"updated_at": &graphql.Field{
 				Type: graphql.DateTime,
 			},
-			"userID": &graphql.Field{
-				Type: ObjectID,
+			"user_id": &graphql.Field{
+				Type: graphql.String,
 			},
-			"outputType": &graphql.Field{
+			"output_type": &graphql.Field{
+				Type: graphql.String,
+			},
+		},
+	},
+)
+
+var ModelImageType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "ModelImage",
+		Fields: graphql.Fields{
+			"image_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"model_id": &graphql.Field{
+				Type: graphql.String,
+			},
+		},
+	},
+)
+
+var ModelPodType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "ModelPod",
+		Fields: graphql.Fields{
+			"pod_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"predict_url": &graphql.Field{
+				Type: graphql.String,
+			},
+			"image_id": &graphql.Field{
+				Type: graphql.String,
+			},
+		},
+	},
+)
+
+var ModelReportType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "ModelReport",
+		Fields: graphql.Fields{
+			"model_report_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"description": &graphql.Field{
+				Type: graphql.String,
+			},
+			"created_at": &graphql.Field{
+				Type: graphql.String,
+			},
+			"model_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"user_id": &graphql.Field{
+				Type: graphql.String,
+			},
+		},
+	},
+)
+
+var ModelInputDetailType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "ModelInputDetail",
+		Fields: graphql.Fields{
+			"model_input_detail_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"type": &graphql.Field{
+				Type: graphql.String,
+			},
+			"description": &graphql.Field{
+				Type: graphql.String,
+			},
+			"default": &graphql.Field{
+				Type: graphql.String,
+			},
+			"max": &graphql.Field{
+				Type: graphql.String,
+			},
+			"min": &graphql.Field{
+				Type: graphql.String,
+			},
+		},
+	},
+)
+
+var ModelInputType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "ModelInput",
+		Fields: graphql.Fields{
+			"model_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"input_detail": &graphql.Field{
+				Type: graphql.NewList(ModelInputDetailType),
+			},
+		},
+	},
+)
+
+var ModelOutputType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "ModelOutput",
+		Fields: graphql.Fields{
+			"model_output_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"output": &graphql.Field{
+				Type: graphql.String,
+			},
+			"created_at": &graphql.Field{
+				Type: graphql.String,
+			},
+			"model_input_data": &graphql.Field{
+				Type: ModelInputDataType,
+			},
+			"model_id": &graphql.Field{
+				Type: graphql.String,
+			},
+		},
+	},
+)
+
+var ModelInputDataType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "ModelInputWithData",
+		Fields: graphql.Fields{
+			"model_input_data_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"data_inputs": &graphql.Field{
+				Type: graphql.NewList(DataInputType),
+			},
+			"image_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"model_id": &graphql.Field{
+				Type: graphql.String,
+			},
+		},
+	},
+)
+
+var DataInputType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "DataInput",
+		Fields: graphql.Fields{
+			"data": &graphql.Field{
+				Type: graphql.String,
+			},
+			"name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"type": &graphql.Field{
 				Type: graphql.String,
 			},
 		},

@@ -24,6 +24,148 @@ import (
 )
 
 var modelCollection *mongo.Collection = database.OpenCollection(database.Client, "model")
+var modelCollectionImage *mongo.Collection = database.OpenCollection(database.Client, "model_image")
+var modelCollectionPod *mongo.Collection = database.OpenCollection(database.Client, "model_pod")
+var modelCollectionReport *mongo.Collection = database.OpenCollection(database.Client, "model_report")
+
+func HandlerPredict() {
+
+}
+
+func HandlerUpload1(reqModel models.ModelDataTransfer, githubCode string) models.ModelData {
+	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+	var model models.ModelData
+	model.ModelID = primitive.NewObjectID()
+	model.Name = reqModel.Name
+	model.Type = reqModel.Type
+	model.IsVisible = reqModel.IsVisible
+	model.GithubURL = reqModel.GithubURL
+	model.Description = reqModel.Description
+	model.PredictRecordCount = 0.0
+	model.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	model.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	model.UserID, _ = primitive.ObjectIDFromHex(reqModel.UserID)
+	model.OutputType = reqModel.Type
+	_, err := modelCollection.InsertOne(ctx, model)
+
+	defer cancel()
+	if err != nil {
+		fmt.Print(err)
+	}
+	githubCode = reqModel.GithubCode
+
+	claims, _ := helper.DecodeToken(githubCode)
+	dir := "repos/" + model.GithubURL
+
+	_, err = git.PlainClone(dir, false, &git.CloneOptions{
+		Auth: &http.BasicAuth{
+			Username: "arbruzaz",
+			Password: claims.AccessToken,
+		},
+		URL:               model.GithubURL,
+		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
+	})
+	ImageID, DockerURL, err := HandlerDeployDocker(dir, model.Name, model.ModelID)
+	defer cancel()
+	if err != nil {
+		fmt.Print(err)
+	}
+	err = HandlerDeployKube(DockerURL, ImageID, model.Name)
+	defer cancel()
+	if err != nil {
+		fmt.Print(err)
+	}
+
+	return model
+}
+
+func HandlerDeployDocker(dir string, modelName string, modelID primitive.ObjectID) (primitive.ObjectID, string, error) {
+	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+
+	DockerImageID, DockerURL := helper.PushToDocker(dir, modelName)
+
+	var modelImage models.ModelImage
+	modelImage.ImageID = primitive.NewObjectID()
+	modelImage.DockerImageID = DockerImageID
+	modelImage.DockeyRegistryURL = DockerURL
+	modelImage.ModelID = modelID
+	_, err := modelCollectionImage.InsertOne(ctx, modelImage)
+
+	defer cancel()
+	if err != nil {
+		return modelImage.ImageID, DockerURL, err
+	}
+
+	return modelImage.ImageID, DockerURL, nil
+}
+
+func HandlerDeployKube(DockerURL string, ImageID primitive.ObjectID, modelName string) error {
+	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+
+	helper.CreateDeploy(DockerURL, modelName)
+	helper.CreateService(modelName)
+	PredictURL, PodURL := helper.DeployKube(modelName)
+
+	var modelPod models.ModelPod
+	modelPod.PodID = primitive.NewObjectID()
+	modelPod.PodURL = PodURL
+	modelPod.PredictURL = PredictURL
+	modelPod.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	modelPod.ImageID = ImageID
+
+	_, err := modelCollectionPod.InsertOne(ctx, modelPod)
+
+	defer cancel()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func GetAllModel1() []models.ModelData {
+	var foundModels []models.ModelData
+	findOptions := options.Find()
+
+	cur, err := modelCollection.Find(context.TODO(), bson.D{{}}, findOptions)
+	if err != nil {
+		println(err)
+		return nil
+	}
+
+	for cur.Next(context.TODO()) {
+		//Create a value into which the single document can be decoded
+		var elem models.ModelData
+		err := cur.Decode(&elem)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		foundModels = append(foundModels, elem)
+	}
+	if err := cur.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	//Close the cursor once finished
+	cur.Close(context.TODO())
+
+	fmt.Printf("Found multiple documents: %+v\n", foundModels)
+	return foundModels
+}
+
+func GetModelByID(modelID string) (models.ModelData, error) {
+	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+	paramID := modelID
+	var foundModel models.ModelData
+
+	err := modelCollection.FindOne(ctx, bson.M{"model_id": paramID}).Decode(&foundModel)
+	defer cancel()
+	if err != nil {
+		return foundModel, err
+	}
+
+	return foundModel, nil
+}
 
 func HandlerUpload() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -68,7 +210,7 @@ func HandlerUpload() gin.HandlerFunc {
 
 		helper.CreateDeploy(dockerUrl, body.Name)
 		helper.CreateService(body.Name)
-		model.PredictUrl = helper.DeployKube(body.Name)
+		model.PredictUrl, _ = helper.DeployKube(body.Name)
 		_, insertErr := modelCollection.InsertOne(ctx, model)
 		defer cancel()
 		if insertErr != nil {
@@ -84,7 +226,7 @@ func HandlerUpload() gin.HandlerFunc {
 
 func GetAllModel() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var foundModels []models.Model
+		var foundModels []models.ModelData
 		findOptions := options.Find()
 
 		cur, err := modelCollection.Find(context.TODO(), bson.D{{}}, findOptions)
@@ -95,7 +237,7 @@ func GetAllModel() gin.HandlerFunc {
 
 		for cur.Next(context.TODO()) {
 			//Create a value into which the single document can be decoded
-			var elem models.Model
+			var elem models.ModelData
 			err := cur.Decode(&elem)
 			if err != nil {
 				log.Fatal(err)
