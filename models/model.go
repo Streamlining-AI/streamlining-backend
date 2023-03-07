@@ -48,7 +48,7 @@ type ModelData struct {
 	IsVisible          bool               `json:"is_visible"`
 	GithubURL          string             `json:"github_url"`
 	Description        string             `json:"description"`
-	PredictRecordCount float32            `json:"predict_record_count"`
+	PredictRecordCount int                `json:"predict_record_count"`
 	CreatedAt          time.Time          `json:"created_at"`
 	UpdatedAt          time.Time          `json:"updated_at"`
 	UserID             primitive.ObjectID `bson:"user_id"`
@@ -57,17 +57,17 @@ type ModelData struct {
 
 type ModelImage struct {
 	ImageID           primitive.ObjectID `bson:"image_id"`
-	DockerImageID     string             `json:"docker_image_id"`
-	DockeyRegistryURL string             `json:"docker_registry_url"`
+	DockerImageID     string             `bson:"docker_image_id"`
+	DockeyRegistryURL string             `bson:"docker_registry_url"`
 	ModelID           primitive.ObjectID `bson:"model_id"`
 }
 
 type ModelPod struct {
 	PodID        primitive.ObjectID `bson:"pod_id"`
-	PodURL       string             `json:"pod_url"`
-	PredictURL   string             `json:"predict_url"`
-	CreatedAt    time.Time          `json:"created_at"`
-	RecentUsedAt time.Time          `json:"recent_used_at"`
+	PodURL       string             `bson:"pod_url"`
+	PredictURL   string             `bson:"predict_url"`
+	CreatedAt    time.Time          `bson:"created_at"`
+	RecentUsedAt time.Time          `bson:"recent_used_at"`
 	ImageID      primitive.ObjectID `bson:"image_id"`
 }
 
@@ -80,8 +80,9 @@ type ModelReport struct {
 }
 
 type ModelInput struct {
-	ModelID     primitive.ObjectID `bson:"model_id"`
-	InputDetail []ModelInputDetail `json:"input_detail"`
+	ModelID       primitive.ObjectID `bson:"model_id"`
+	DockerImageID string             `json:"docker_image_id"`
+	InputDetail   []ModelInputDetail `json:"input_detail"`
 }
 
 type ModelInputDetail struct {
@@ -89,28 +90,57 @@ type ModelInputDetail struct {
 	Name               string             `json:"name"`
 	Type               string             `json:"type"`
 	Description        string             `json:"description"`
-	Default            string             `json:"default"`
-	Max                string             `json:"max"`
-	Min                string             `json:"min"`
+	Default            interface{}        `json:"default"`
+	Optional           Optional           `json:"optional"`
 }
 
 type ModelOutputData struct {
 	ModelOutputID  primitive.ObjectID `bson:"model_output_id"`
-	Output         string             `json:"output"`
-	CreatedAt      time.Time          `json:"created_at"`
-	ModelInputData ModelInputData     `json:"model_input_data"`
+	Output         string             `bson:"output"`
+	CreatedAt      time.Time          `bson:"created_at"`
+	ModelInputData ModelInputData     `bson:"model_input_data"`
 	ModelID        primitive.ObjectID `bson:"model_id"`
 }
 
 type ModelInputData struct {
-	ModelInputDataID primitive.ObjectID `bson:"model_input_data_id"`
-	DataInputs       []DataInput        `json:"data_inputs"`
-	ModelID          primitive.ObjectID `bson:"model_id"`
-	ImageID          primitive.ObjectID `bson:"image_id"`
+	DataInputs    []DataInput `json:"data_inputs"`
+	DockerImageID string      `json:"docker_image_id"`
+}
+
+type ModelConfig struct {
+	Input  []Input `json:"input"`
+	Output Output  `json:"output"`
+}
+
+type Output struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type Input struct {
+	Name        string      `json:"name"`
+	Type        string      `json:"type"`
+	Description string      `json:"description"`
+	Default     interface{} `json:"default"`
+	Optional    Optional    `json:"optional"`
+}
+
+type Optional struct {
+	MaxLength int           `json:"max_length"`
+	MinLength int           `json:"min_length"`
+	Ge        int           `json:"ge"`
+	Le        int           `json:"le"`
+	Choices   []interface{} `json:"choices"`
 }
 
 type DataInput struct {
-	Data string `json:"data"`
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Data               interface{} `json:"data"`
+	ModelInputDetailID string      `json:"model_input_detail_id"`
+	Type               string      `json:"type"`
+}
+
+type ModelInputDataTransfer struct {
+	DataInputs    []DataInput `json:"data_inputs"`
+	ModelID       string      `json:"model_id"`
+	DockerImageID string      `json:"docker_image_id"`
 }
