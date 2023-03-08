@@ -14,4 +14,8 @@ func UserRoutes(incomingRoutes *gin.Engine) {
 	incomingRoutes.GET("/model/:id", controller.GetModelByID())
 	incomingRoutes.GET("/model/", controller.GetAllModel())
 	incomingRoutes.POST("/predict/", controller.HandlerPredict())
+	incomingRoutes.GET("/model/output/:model_id", controller.GetAllOutputHistory())
+	incomingRoutes.DELETE("/model/:model_id", controller.HandlerDeleteModel())
+	incomingRoutes.POST("/model/", controller.HandlerUpload())
+	incomingRoutes.POST("/model/report", controller.HandlerReportModel())
 }

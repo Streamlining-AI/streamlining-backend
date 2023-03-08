@@ -33,7 +33,7 @@ func main() {
 	}))
 
 	routes.UserRoutes(router)
-	router.POST("/upload/clone", controller.HandlerUpload())
+
 	// router.Use(middleware.Authentication())
 
 	// API-2

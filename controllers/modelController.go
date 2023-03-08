@@ -225,6 +225,7 @@ func GetAllModel() gin.HandlerFunc {
 
 		fmt.Printf("Found multiple documents: %+v\n", foundModels)
 		c.JSON(200, foundModels)
+		return
 	}
 }
 
@@ -241,6 +242,7 @@ func GetModelByID() gin.HandlerFunc {
 			return
 		}
 		c.JSON(200, foundModel)
+		return
 	}
 }
 
@@ -321,6 +323,9 @@ func HandlerPredict() gin.HandlerFunc {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
+
+		update := bson.D{{Key: "$set", Value: bson.D{{Key: "predict_record_count", Value: model.PredictRecordCount + 1}}}}
+		_, err = modelCollection.UpdateOne(ctx, bson.M{"model_id": modelID}, update)
 		// requestJSON, _ := json.Marshal(predictBody)
 		// req, reqerr := gohttp.NewRequest(
 		// 	"POST",
@@ -478,5 +483,114 @@ func HandlerUpload1() gin.HandlerFunc {
 		}
 		c.JSON(200, gin.H{"message": "Clone Successful"})
 
+	}
+}
+
+func GetAllOutputHistory() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("model_id")
+
+		modelID, _ := primitive.ObjectIDFromHex(id)
+		var ModelOutputDatas []models.ModelOutputData
+		findOptions := options.Find()
+		cur, err := modelCollectionOutput.Find(context.TODO(), bson.M{"model_id": modelID}, findOptions)
+		if err != nil {
+			c.JSON(400, err)
+			return
+		}
+
+		for cur.Next(context.TODO()) {
+			//Create a value into which the single document can be decoded
+			var elem models.ModelOutputData
+			err := cur.Decode(&elem)
+			if err != nil {
+				c.JSON(400, err)
+				return
+			}
+
+			ModelOutputDatas = append(ModelOutputDatas, elem)
+		}
+		if err := cur.Err(); err != nil {
+			c.JSON(500, err)
+			return
+		}
+
+		//Close the cursor once finished
+		cur.Close(context.TODO())
+
+		c.JSON(200, ModelOutputDatas)
+		return
+	}
+}
+
+func HandlerUpdateModel() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+	}
+}
+func HandlerDeleteModel() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("model_id")
+
+		modelID, _ := primitive.ObjectIDFromHex(id)
+
+		var deletedDocument bson.M
+		err := modelCollection.FindOneAndDelete(context.TODO(), bson.M{"model_id": modelID}).Decode(&deletedDocument)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				c.JSON(200, gin.H{"message": "No matched document"})
+				return
+			}
+			c.JSON(500, err)
+			return
+		}
+
+		err = modelCollectionInputDetail.FindOneAndDelete(context.TODO(), bson.M{"model_id": modelID}).Decode(&deletedDocument)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				c.JSON(200, gin.H{"message": "No matched document"})
+				return
+			}
+			c.JSON(500, err)
+			return
+		}
+
+		err = modelCollectionImage.FindOneAndDelete(context.TODO(), bson.M{"model_id": modelID}).Decode(&deletedDocument)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				c.JSON(200, gin.H{"message": "No matched document"})
+				return
+			}
+			c.JSON(500, err)
+			return
+		}
+		c.JSON(200, gin.H{"message": "Success"})
+	}
+}
+func HandlerReportModel() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		var reportRequest models.ModelReportRequest
+		defer cancel()
+		if err := c.BindJSON(&reportRequest); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		var modelReport models.ModelReport
+		modelReport.ModelID, _ = primitive.ObjectIDFromHex(reportRequest.ModelID)
+		modelReport.UserID, _ = primitive.ObjectIDFromHex(reportRequest.UserID)
+		modelReport.Description = reportRequest.Description
+		modelReport.ModelReportID = primitive.NewObjectID()
+		modelReport.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		// Insert Input Detail to DB
+		defer cancel()
+		_, err := modelCollectionReport.InsertOne(ctx, modelReport)
+		if err != nil {
+			c.JSON(400, err)
+			return
+		}
+
+		c.JSON(200, gin.H{"message": "Success"})
 	}
 }
