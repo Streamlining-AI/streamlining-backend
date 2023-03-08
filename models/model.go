@@ -151,3 +151,16 @@ type ModelReportRequest struct {
 	UserID      string `json:"user_id"`
 	Description string `json:"description"`
 }
+
+type ModelTransfer struct {
+	ModelID            string             `json:"model_id"`
+	Name               string             `json:"name"`
+	Type               string             `json:"type"`
+	GithubURL          string             `json:"github_url"`
+	Description        string             `json:"description"`
+	PredictRecordCount int                `json:"predict_record_count"`
+	CreatedAt          time.Time          `json:"created_at"`
+	OutputType         string             `json:"output_type"`
+	DockerImageID      []string           `json:"docker_image_id"`
+	InputDetail        []ModelInputDetail `json:"input_detail"`
+}

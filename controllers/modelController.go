@@ -232,15 +232,26 @@ func GetAllModel() gin.HandlerFunc {
 func GetModelByID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		paramID := c.Param("model_id")
-		var foundModel models.Model
+		id := c.Param("model_id")
+		modelID, _ := primitive.ObjectIDFromHex(id)
+		var foundModel models.ModelData
 
-		err := modelCollection.FindOne(ctx, bson.M{"model_id": paramID}).Decode(&foundModel)
+		err := modelCollection.FindOne(ctx, bson.M{"model_id": modelID}).Decode(&foundModel)
 		defer cancel()
 		if err != nil {
 			c.JSON(400, gin.H{"error": "Model ID is invalid"})
 			return
 		}
+
+		// var modelInput models.ModelInput
+
+		// err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": inputData.DockerImageID}).Decode(&modelInput)
+		// defer cancel()
+		// if err != nil {
+		// 	c.JSON(400, gin.H{"error": err.Error()})
+		// 	return
+		// }
+
 		c.JSON(200, foundModel)
 		return
 	}
