@@ -30,6 +30,13 @@ spec:
             secretKeyRef:
               name: mongodb-secret
               key: mongo-root-password
+        volumeMounts:
+        - name: mongo-vol
+          mountPath: "/data/db"
+      volumes:
+      - name: mongo-vol
+        persistentVolumeClaim:
+          claimName: "mongo-vol-pvc"
 ---
 apiVersion: v1
 kind: Service
@@ -38,8 +45,9 @@ metadata:
 spec:
   selector:
     app: mongodb
+  type: LoadBalancer #Testing
   ports:
     - protocol: TCP
       port: 27017 # Port Service
       targetPort: 27017 #Container Port Deployment
-
+      nodePort: 30112

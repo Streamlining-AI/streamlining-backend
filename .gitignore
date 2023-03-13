@@ -2,3 +2,6 @@ go.sum
 .env
 
 repos/
+Deployment.yaml
+
+Service.yaml
