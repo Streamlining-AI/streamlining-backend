@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"strings"
 
@@ -45,7 +45,7 @@ func VerifyPassword(userPassword string, providedPassword string) (bool, string)
 	msg := ""
 
 	if err != nil {
-		msg = fmt.Sprintf("login or passowrd is incorrect")
+		msg = "login or passowrd is incorrect"
 		check = false
 	}
 
@@ -86,18 +86,18 @@ func Regsiter() gin.HandlerFunc {
 			return
 		}
 
-		user.Created_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		user.Updated_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		user.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		user.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		user.ID = primitive.NewObjectID()
 		user.User_id = user.ID.Hex()
-		token, refreshToken, err := helper.GenerateAllTokens(*user.Email, user.User_id)
+		token, refreshToken, _ := helper.GenerateAllTokens(*user.Email, user.User_id)
 		user.Token = &token
 		user.Refresh_token = &refreshToken
 
 		resultInsertionNumber, insertErr := userCollection.InsertOne(ctx, user)
 		defer cancel()
 		if insertErr != nil {
-			msg := fmt.Sprintf("User item was not created")
+			msg := "User item was not created"
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
 		}
@@ -128,7 +128,7 @@ func Login() gin.HandlerFunc {
 
 		passwordIsValid, msg := VerifyPassword(*user.Password, *foundUser.Password)
 		defer cancel()
-		if passwordIsValid != true {
+		if !passwordIsValid {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
 		}
@@ -161,8 +161,8 @@ func RegisterGithub(userName string, userId string) error {
 	user.ID = primitive.NewObjectID()
 	user.User_id = userId
 	user.Username = userName
-	user.Created_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-	user.Updated_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	user.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	user.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 
 	defer cancel()
 	if err != nil {
@@ -213,7 +213,7 @@ func GithubCallbackHandler() gin.HandlerFunc {
 			log.Panic("JSON parse error")
 		}
 
-		if strings.Contains(string(prettyJSON.Bytes()), `"message": "Bad credentials"`) {
+		if strings.Contains(string(prettyJSON.String()), `"message": "Bad credentials"`) {
 			println("Bad Credentials")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Bad Credentials"})
 			return
@@ -229,7 +229,7 @@ func GithubCallbackHandler() gin.HandlerFunc {
 
 		defer cancel()
 		if err != nil {
-			msg := fmt.Sprintf("error occured while checking for the username")
+			msg := "error occured while checking for the username"
 			c.JSON(http.StatusBadRequest, msg)
 			return
 		}
@@ -288,7 +288,7 @@ func GetGithubData(accessToken string) string {
 	}
 
 	// Read the response as a byte slice
-	respbody, _ := ioutil.ReadAll(resp.Body)
+	respbody, _ := io.ReadAll(resp.Body)
 
 	// Convert byte slice to string and return
 	// util.GitClone(accessToken)

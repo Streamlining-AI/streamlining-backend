@@ -56,10 +56,10 @@ type ModelData struct {
 }
 
 type ModelImage struct {
-	ImageID           primitive.ObjectID `bson:"image_id" json:"image_id"`
-	DockerImageID     string             `bson:"docker_image_id" json:"docker_image_id"`
-	DockeyRegistryURL string             `bson:"docker_registry_url" json:"docker_registry_url"`
-	ModelID           primitive.ObjectID `bson:"model_id" json:"model_id"`
+	ImageID       primitive.ObjectID `bson:"image_id" json:"image_id"`
+	DockerImageID string             `bson:"docker_image_id" json:"docker_image_id"`
+	ModelID       primitive.ObjectID `bson:"model_id" json:"model_id"`
+	CreatedAt     time.Time          `bson:"created_at" json:"created_at"`
 }
 
 type ModelPod struct {
@@ -153,7 +153,7 @@ type ModelReportRequest struct {
 }
 
 type ModelTransfer struct {
-	ModelID            string             `json:"model_id"`
+	ModelID            primitive.ObjectID `json:"model_id"`
 	Name               string             `json:"name"`
 	Type               string             `json:"type"`
 	GithubURL          string             `json:"github_url"`
@@ -163,4 +163,9 @@ type ModelTransfer struct {
 	OutputType         string             `json:"output_type"`
 	DockerImageID      []string           `json:"docker_image_id"`
 	InputDetail        []ModelInputDetail `json:"input_detail"`
+}
+
+type ModelIDAndDockerImageID struct {
+	ModelID       string `json:"model_id"`
+	DockerImageID string `json:"docker_image_id"`
 }

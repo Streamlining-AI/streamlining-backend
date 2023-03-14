@@ -1,15 +1,13 @@
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
-	gohttp "net/http"
 	"os"
-	"strings"
+	"sort"
 	"time"
 
 	"github.com/Streamlining-AI/streamlining-backend/database"
@@ -17,7 +15,6 @@ import (
 	"github.com/Streamlining-AI/streamlining-backend/models"
 	"github.com/gin-gonic/gin"
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -71,22 +68,27 @@ func HandlerUpload() gin.HandlerFunc {
 			URL:               model.GithubURL,
 			RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 		})
-
-		// ImageID, DockerURL, DockerImageID, err := HandlerDeployDocker(dir, model.Name, model.ModelID)
 		if err != nil {
-			fmt.Print(err)
+			c.JSON(500, gin.H{"message": "Cannot Get data"})
+			return
+		}
+		ImageID, DockerURL, err := HandlerDeployDocker(dir, model.Name, model.ModelID)
+		if err != nil {
+			c.JSON(500, gin.H{"message": "Error during handling docker image"})
+			return
 		}
 
-		DockerImageID := "TestImage"
-		err = HandlerConfig(dir, model.ModelID, DockerImageID)
+		err = HandlerConfig(dir, model.ModelID, DockerURL)
 		if err != nil {
-			fmt.Print(err)
+			c.JSON(400, gin.H{"message": "Cannot create config"})
+			return
 		}
 
-		// err = HandlerDeployKube(DockerURL, ImageID, model.Name)
+		err = HandlerDeployKube(DockerURL, ImageID, model.Name)
 
 		if err != nil {
-			fmt.Print(err)
+			c.JSON(500, gin.H{"message": "Error during handling kubernetes "})
+			return
 		}
 
 		c.JSON(200, gin.H{"message": "Clone Successful"})
@@ -107,7 +109,7 @@ func HandlerConfig(dir string, modelID primitive.ObjectID, dockerImageID string)
 
 	defer fileContent.Close()
 
-	byteResult, _ := ioutil.ReadAll(fileContent)
+	byteResult, _ := io.ReadAll(fileContent)
 
 	var payload models.ModelConfig
 	json.Unmarshal(byteResult, &payload)
@@ -152,24 +154,24 @@ func CreateInputDetail(inputConfig []models.Input) []models.ModelInputDetail {
 	return modelInputDetailS
 }
 
-func HandlerDeployDocker(dir string, modelName string, modelID primitive.ObjectID) (primitive.ObjectID, string, string, error) {
+func HandlerDeployDocker(dir string, modelName string, modelID primitive.ObjectID) (primitive.ObjectID, string, error) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
-	DockerImageID, DockerURL := helper.PushToDocker(dir, modelName)
+	DockerImageID := helper.PushToDocker(dir, modelName)
 
 	var modelImage models.ModelImage
 	modelImage.ImageID = primitive.NewObjectID()
 	modelImage.DockerImageID = DockerImageID
-	modelImage.DockeyRegistryURL = DockerURL
 	modelImage.ModelID = modelID
+	modelImage.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 	_, err := modelCollectionImage.InsertOne(ctx, modelImage)
 
 	defer cancel()
 	if err != nil {
-		return modelImage.ImageID, DockerURL, modelImage.DockerImageID, err
+		return modelImage.ImageID, DockerImageID, err
 	}
 
-	return modelImage.ImageID, DockerURL, modelImage.DockerImageID, nil
+	return modelImage.ImageID, DockerImageID, nil
 }
 
 func HandlerDeployKube(DockerURL string, ImageID primitive.ObjectID, modelName string) error {
@@ -225,7 +227,6 @@ func GetAllModel() gin.HandlerFunc {
 
 		fmt.Printf("Found multiple documents: %+v\n", foundModels)
 		c.JSON(200, foundModels)
-		return
 	}
 }
 
@@ -243,17 +244,90 @@ func GetModelByID() gin.HandlerFunc {
 			return
 		}
 
-		// var modelInput models.ModelInput
+		var foundImages []models.ModelImage
+		var dockerImagesID []string
+		findOptions := options.Find()
 
-		// err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": inputData.DockerImageID}).Decode(&modelInput)
-		// defer cancel()
-		// if err != nil {
-		// 	c.JSON(400, gin.H{"error": err.Error()})
-		// 	return
-		// }
+		cur, err := modelCollectionImage.Find(context.TODO(), bson.M{"model_id": modelID}, findOptions)
+		if err != nil {
+			println(err)
+			return
+		}
 
-		c.JSON(200, foundModel)
-		return
+		for cur.Next(context.TODO()) {
+			//Create a value into which the single document can be decoded
+			var elem models.ModelImage
+			err := cur.Decode(&elem)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			foundImages = append(foundImages, elem)
+		}
+		if err := cur.Err(); err != nil {
+			log.Fatal(err)
+		}
+
+		//Close the cursor once finished
+		cur.Close(context.TODO())
+
+		sort.Slice(foundImages, func(i, j int) bool {
+			return foundImages[i].CreatedAt.After(foundImages[j].CreatedAt)
+		})
+
+		for i := 0; i < len(foundImages); i++ {
+			dockerImagesID = append(dockerImagesID, foundImages[i].DockerImageID)
+		}
+
+		var modelInput models.ModelInput
+
+		err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": foundImages[0].DockerImageID}).Decode(&modelInput)
+		defer cancel()
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		var modelTransfer models.ModelTransfer
+
+		modelTransfer.ModelID = foundModel.ModelID
+		modelTransfer.Name = foundModel.Name
+		modelTransfer.Type = foundModel.Type
+		modelTransfer.GithubURL = foundModel.GithubURL
+		modelTransfer.Description = foundModel.Description
+		modelTransfer.PredictRecordCount = foundModel.PredictRecordCount
+		modelTransfer.CreatedAt = foundModel.CreatedAt
+		modelTransfer.OutputType = foundModel.OutputType
+		modelTransfer.DockerImageID = dockerImagesID
+		modelTransfer.InputDetail = modelInput.InputDetail
+
+		c.JSON(200, modelTransfer)
+	}
+}
+
+func GetModelInputByDockerImageID() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+
+		var reqModel models.ModelIDAndDockerImageID
+		defer cancel()
+		if err := c.BindJSON(&reqModel); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		modelID, _ := primitive.ObjectIDFromHex(reqModel.ModelID)
+
+		var modelInput models.ModelInput
+
+		err := modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": reqModel.DockerImageID}).Decode(&modelInput)
+		defer cancel()
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, modelInput)
 	}
 }
 
@@ -337,6 +411,9 @@ func HandlerPredict() gin.HandlerFunc {
 
 		update := bson.D{{Key: "$set", Value: bson.D{{Key: "predict_record_count", Value: model.PredictRecordCount + 1}}}}
 		_, err = modelCollection.UpdateOne(ctx, bson.M{"model_id": modelID}, update)
+		if err != nil {
+			fmt.Println(err)
+		}
 		// requestJSON, _ := json.Marshal(predictBody)
 		// req, reqerr := gohttp.NewRequest(
 		// 	"POST",
@@ -357,12 +434,12 @@ func HandlerPredict() gin.HandlerFunc {
 		// }
 
 		// // Response body converted to stringified JSON
-		// respbody, _ := ioutil.ReadAll(respPredict.Body)
+		// respbody, _ := io.ReadAll(respPredict.Body)
 
 		// // Represents the response received from Github
 		// type PredictOutput struct {
 		// 	Status string `json:"status"`
-		// 	Output string `json:"output"`
+		// Output interface{} `json:"output"`
 		// }
 
 		// // Convert stringified JSON to a struct object of type githubAccessTokenResponse
@@ -370,130 +447,6 @@ func HandlerPredict() gin.HandlerFunc {
 		// json.Unmarshal(respbody, &predictResp)
 
 		c.JSON(200, result)
-	}
-}
-
-func Predict() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var resp models.PredictBody
-
-		if err := c.BindJSON(&resp); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-
-		var foundModel models.Model
-		var foundModel1 models.Model
-		err := modelCollection.FindOne(context.TODO(), bson.M{"_id": resp.Id}).Decode(&foundModel)
-		if err != nil {
-			println(err)
-			return
-		}
-
-		output, err := json.Marshal(foundModel)
-		if err != nil {
-			panic(err)
-		}
-
-		json.Unmarshal(output, &foundModel1)
-		fmt.Println(foundModel1.PredictUrl)
-		data := map[string]map[string]string{
-			"input": {
-				"text": resp.Input,
-			},
-		}
-		requestJSON, _ := json.Marshal(data)
-
-		fmt.Println(string(requestJSON))
-		// POST request to set URL
-		req, reqerr := gohttp.NewRequest(
-			"POST",
-			foundModel1.PredictUrl,
-			bytes.NewBuffer(requestJSON),
-		)
-
-		if reqerr != nil {
-			log.Panic("Request creation failed")
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-
-		// Get the response
-		respPredict, resperr := gohttp.DefaultClient.Do(req)
-		if resperr != nil {
-			log.Panic("Request failed")
-		}
-
-		// Response body converted to stringified JSON
-		respbody, _ := ioutil.ReadAll(respPredict.Body)
-
-		// Represents the response received from Github
-		type PredictOutput struct {
-			Status string `json:"status"`
-			Output string `json:"output"`
-		}
-
-		// Convert stringified JSON to a struct object of type githubAccessTokenResponse
-		var predictResp PredictOutput
-		json.Unmarshal(respbody, &predictResp)
-
-		c.JSON(200, predictResp)
-	}
-}
-
-func HandlerUpload1() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		var body models.Message
-		defer cancel()
-		if err := c.BindJSON(&body); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-		url := body.Url
-		code := body.Code
-		claims, _ := helper.DecodeToken(code)
-		indexDotCom := strings.LastIndex(url, ".com")
-		indexDotGit := strings.LastIndex(url, ".git")
-		dir := "repos/" + url[indexDotCom+5:indexDotGit]
-
-		_, err := git.PlainClone(dir, false, &git.CloneOptions{
-			Auth: &http.BasicAuth{
-				Username: "arbruzaz",
-				Password: claims.AccessToken,
-			},
-			URL:               url,
-			RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
-		})
-
-		if err != nil {
-			c.JSON(500, gin.H{"error": "error"})
-			return
-		}
-		dockerImageId, dockerUrl := helper.PushToDocker(dir, body.Name)
-
-		var model models.Model
-		model.ID = primitive.NewObjectID()
-		model.Name = body.Name
-		model.ImageId = dockerImageId
-		model.Input = body.Input
-		model.Url = dockerUrl
-		model.Created_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		model.Updated_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-
-		helper.CreateDeploy(dockerUrl, body.Name)
-		helper.CreateService(body.Name)
-		model.PredictUrl, _ = helper.DeployKube(body.Name)
-		_, insertErr := modelCollection.InsertOne(ctx, model)
-		defer cancel()
-		if insertErr != nil {
-			c.JSON(500, gin.H{"err": "error"})
-		}
-		if err != nil {
-			c.JSON(500, gin.H{"err": "error"})
-		}
-		c.JSON(200, gin.H{"message": "Clone Successful"})
-
 	}
 }
 
@@ -530,10 +483,8 @@ func GetAllOutputHistory() gin.HandlerFunc {
 		cur.Close(context.TODO())
 
 		c.JSON(200, ModelOutputDatas)
-		return
 	}
 }
-
 func HandlerUpdateModel() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
@@ -605,3 +556,71 @@ func HandlerReportModel() gin.HandlerFunc {
 		c.JSON(200, gin.H{"message": "Success"})
 	}
 }
+
+// func Predict() gin.HandlerFunc {
+// 	return func(c *gin.Context) {
+// 		var resp models.PredictBody
+
+// 		if err := c.BindJSON(&resp); err != nil {
+// 			c.JSON(400, gin.H{"error": err.Error()})
+// 			return
+// 		}
+
+// 		var foundModel models.Model
+// 		var foundModel1 models.Model
+// 		err := modelCollection.FindOne(context.TODO(), bson.M{"_id": resp.Id}).Decode(&foundModel)
+// 		if err != nil {
+// 			println(err)
+// 			return
+// 		}
+
+// 		output, err := json.Marshal(foundModel)
+// 		if err != nil {
+// 			panic(err)
+// 		}
+
+// 		json.Unmarshal(output, &foundModel1)
+// 		fmt.Println(foundModel1.PredictUrl)
+// 		data := map[string]map[string]string{
+// 			"input": {
+// 				"text": resp.Input,
+// 			},
+// 		}
+// 		requestJSON, _ := json.Marshal(data)
+
+// 		fmt.Println(string(requestJSON))
+// 		// POST request to set URL
+// 		req, reqerr := gohttp.NewRequest(
+// 			"POST",
+// 			foundModel1.PredictUrl,
+// 			bytes.NewBuffer(requestJSON),
+// 		)
+
+// 		if reqerr != nil {
+// 			log.Panic("Request creation failed")
+// 		}
+// 		req.Header.Set("Content-Type", "application/json")
+// 		req.Header.Set("Accept", "application/json")
+
+// 		// Get the response
+// 		respPredict, resperr := gohttp.DefaultClient.Do(req)
+// 		if resperr != nil {
+// 			log.Panic("Request failed")
+// 		}
+
+// 		// Response body converted to stringified JSON
+// 		respbody, _ := io.ReadAll(respPredict.Body)
+
+// 		// Represents the response received from Github
+// 		type PredictOutput struct {
+// 			Status string `json:"status"`
+// 			Output string `json:"output"`
+// 		}
+
+// 		// Convert stringified JSON to a struct object of type githubAccessTokenResponse
+// 		var predictResp PredictOutput
+// 		json.Unmarshal(respbody, &predictResp)
+
+// 		c.JSON(200, predictResp)
+// 	}
+// }

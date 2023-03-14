@@ -1,7 +1,12 @@
 package helper
 
 import (
+	"bufio"
+	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os/exec"
@@ -11,10 +16,12 @@ import (
 
 	"os"
 
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
 	"gopkg.in/yaml.v2"
 )
 
-func PushToDocker(folderName string, name string) (string, string) {
+func PushToDocker(folderName string, name string) string {
 	libRegEx, e := regexp.Compile("cog.yaml")
 	if e != nil {
 		log.Fatal(e)
@@ -36,6 +43,12 @@ func PushToDocker(folderName string, name string) (string, string) {
 	task := "build"
 	cogTag := "-t"
 
+	pathDir, err := os.Getwd()
+	if err != nil {
+		log.Println(err)
+	}
+	fmt.Println(pathDir)
+	name = strings.ToLower(name)
 	cmd := exec.Command(commandCog, task, cogTag, name)
 	cmd.Dir = folderName
 	if err := cmd.Run(); err != nil {
@@ -44,14 +57,6 @@ func PushToDocker(folderName string, name string) (string, string) {
 
 	commandDocker := "docker"
 	images := "images"
-	login := "login"
-	tag := "tag"
-	push := "push"
-	ip := "192.168.49.2:30001"
-	userAuth := "-u"
-	user := "admin"
-	passAuth := "-p"
-	password := "password"
 	// docker images name
 	cmd1, err := exec.Command(commandDocker, images, name).Output()
 	if err != nil {
@@ -60,34 +65,56 @@ func PushToDocker(folderName string, name string) (string, string) {
 	dockerOutput := string(cmd1)
 	dockerDescript := strings.Split(dockerOutput, "\n")
 	dockerDetail := strings.Fields(dockerDescript[1])
-	dockerImageId := dockerDetail[2]
+	dockerImageID := dockerDetail[2]
+	dockerName := dockerDetail[0]
+	fmt.Println(dockerImageID)
 
-	fmt.Println(dockerImageId)
-
-	// docker login 192.168.49.2:30001 -u 'admin' -p 'password'
-	cmd2, err := exec.Command(commandDocker, login, ip, userAuth, user, passAuth, password).Output()
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
-	dockerOutput = string(cmd2)
-	fmt.Println(dockerOutput)
+	defer cli.Close()
 
-	// docker tag {ImageID} 192.168.49.2:30001/{imageName}
-	cmd3, err := exec.Command(commandDocker, tag, dockerImageId, ip+"/"+dockerImageId).Output()
-	if err != nil {
-		log.Fatal(err)
+	authConfig := types.AuthConfig{
+		Username:      "admin",
+		Password:      "Harbor12345",
+		ServerAddress: "core.harbor.domain",
 	}
-	dockerOutput = string(cmd3)
-	fmt.Println(dockerOutput)
 
-	// docker push 192.168.49.2:30001/{imageName}
-	cmd4, err := exec.Command(commandDocker, push, ip+"/"+dockerImageId).Output()
+	encodedJSON, err := json.Marshal(authConfig)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
-	dockerOutput = string(cmd4)
-	fmt.Println(dockerOutput)
-	return dockerImageId, ip + "/" + dockerImageId
+	authStr := base64.URLEncoding.EncodeToString(encodedJSON)
+	imageTag := "core.harbor.domain/library/" + dockerName
+
+	err = cli.ImageTag(ctx, dockerImageID, imageTag)
+	fmt.Print(err)
+	pusher, err := cli.ImagePush(ctx, imageTag, types.ImagePushOptions{RegistryAuth: authStr})
+	if err != nil {
+		panic(err)
+	}
+	defer pusher.Close()
+
+	type ErrorMessage struct {
+		Error string
+	}
+	var errorMessage ErrorMessage
+	buffIOReader := bufio.NewReader(pusher)
+
+	for {
+		streamBytes, err := buffIOReader.ReadBytes('\n')
+		fmt.Printf("%s", streamBytes)
+		if err == io.EOF {
+			break
+		}
+		json.Unmarshal(streamBytes, &errorMessage)
+		if errorMessage.Error != "" {
+			panic(errorMessage.Error)
+		}
+	}
+	return imageTag
 }
 
 func CreateDeploy(URL string, Name string) {
@@ -194,7 +221,7 @@ func CreateDeploy(URL string, Name string) {
 	if err != nil {
 		fmt.Printf("Error while Marshaling. %v", err)
 	}
-	err2 := ioutil.WriteFile("Deployment.yaml", DeployYaml, 0)
+	err2 := ioutil.WriteFile("Deployment.yaml", DeployYaml, 0777)
 
 	if err2 != nil {
 
@@ -264,7 +291,7 @@ func CreateService(Name string) {
 	if err != nil {
 		fmt.Printf("Error while Marshaling. %v", err)
 	}
-	err2 := ioutil.WriteFile("Service.yaml", ServiceYaml, 0)
+	err2 := ioutil.WriteFile("Service.yaml", ServiceYaml, 0777)
 
 	if err2 != nil {
 
