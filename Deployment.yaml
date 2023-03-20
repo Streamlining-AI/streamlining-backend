@@ -1,20 +1,20 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: model1-service
+  name: model88-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: model1
+      app: model88
   template:
     metadata:
       labels:
-        app: model1
+        app: model88
     spec:
       containers:
-      - name: model1
-        image: core.harbor.domain/library/model1
+      - name: model88
+        image: core.harbor.domain/library/model88:v1.1
         ports:
         - containerPort: 5000
       imagePullSecrets:

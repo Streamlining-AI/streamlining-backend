@@ -21,7 +21,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func PushToDocker(folderName string, name string) string {
+func PushToDocker(folderName string, name string, modelVersion string) string {
 	libRegEx, e := regexp.Compile("cog.yaml")
 	if e != nil {
 		log.Fatal(e)
@@ -87,7 +87,7 @@ func PushToDocker(folderName string, name string) string {
 		panic(err)
 	}
 	authStr := base64.URLEncoding.EncodeToString(encodedJSON)
-	imageTag := "core.harbor.domain/library/" + dockerName
+	imageTag := "core.harbor.domain/library/" + dockerName + ":" + modelVersion
 
 	err = cli.ImageTag(ctx, dockerImageID, imageTag)
 	fmt.Print(err)

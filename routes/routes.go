@@ -1,9 +1,14 @@
 package routes
 
 import (
+	"net/http"
+	"os"
+
 	controller "github.com/Streamlining-AI/streamlining-backend/controllers"
 	"github.com/gin-gonic/gin"
 )
+
+var uploadPath = os.TempDir()
 
 // UserRoutes function
 func UserRoutes(incomingRoutes *gin.Engine) {
@@ -19,4 +24,6 @@ func UserRoutes(incomingRoutes *gin.Engine) {
 	incomingRoutes.DELETE("/model/:model_id", controller.HandlerDeleteModel())
 	incomingRoutes.POST("/model/", controller.HandlerUpload())
 	incomingRoutes.POST("/model/report", controller.HandlerReportModel())
+	incomingRoutes.POST("/upload", controller.UploadFileHandler())
+	incomingRoutes.StaticFS("/files", http.Dir(uploadPath))
 }

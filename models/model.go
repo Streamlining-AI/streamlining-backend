@@ -31,14 +31,15 @@ type Message struct {
 }
 
 type ModelDataTransfer struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	IsVisible   bool   `json:"is_visible"`
-	GithubURL   string `json:"github_url"`
-	Description string `json:"description"`
-	UserID      string `json:"user_id"`
-	OutputType  string `json:"output_type"`
-	GithubCode  string `json:"github_code"`
+	Name          string `json:"name"`
+	Type          string `json:"type"`
+	IsVisible     bool   `json:"is_visible"`
+	GithubURL     string `json:"github_url"`
+	Description   string `json:"description"`
+	UserID        string `json:"user_id"`
+	OutputType    string `json:"output_type"`
+	GithubCode    string `json:"github_code"`
+	Model_Version string `json:"model_version"`
 }
 
 type ModelData struct {
@@ -59,6 +60,7 @@ type ModelImage struct {
 	ImageID       primitive.ObjectID `bson:"image_id" json:"image_id"`
 	DockerImageID string             `bson:"docker_image_id" json:"docker_image_id"`
 	ModelID       primitive.ObjectID `bson:"model_id" json:"model_id"`
+	ModelVersion  string             `bson:"model_version" json:"model_version"`
 	CreatedAt     time.Time          `bson:"created_at" json:"created_at"`
 }
 

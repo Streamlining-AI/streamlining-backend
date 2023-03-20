@@ -1,11 +1,13 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	gohttp "net/http"
 	"os"
 	"sort"
 	"time"
@@ -72,7 +74,7 @@ func HandlerUpload() gin.HandlerFunc {
 			c.JSON(500, gin.H{"message": "Cannot Get data"})
 			return
 		}
-		ImageID, DockerURL, err := HandlerDeployDocker(dir, model.Name, model.ModelID)
+		ImageID, DockerURL, err := HandlerDeployDocker(dir, model.Name, model.ModelID, reqModel.Model_Version)
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Error during handling docker image"})
 			return
@@ -82,6 +84,11 @@ func HandlerUpload() gin.HandlerFunc {
 		if err != nil {
 			c.JSON(400, gin.H{"message": "Cannot create config"})
 			return
+		}
+
+		err = os.RemoveAll("repos/" + model.Name)
+		if err != nil {
+			log.Fatal(err)
 		}
 
 		err = HandlerDeployKube(DockerURL, ImageID, model.Name)
@@ -154,15 +161,16 @@ func CreateInputDetail(inputConfig []models.Input) []models.ModelInputDetail {
 	return modelInputDetailS
 }
 
-func HandlerDeployDocker(dir string, modelName string, modelID primitive.ObjectID) (primitive.ObjectID, string, error) {
+func HandlerDeployDocker(dir string, modelName string, modelID primitive.ObjectID, modelVersion string) (primitive.ObjectID, string, error) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
-	DockerImageID := helper.PushToDocker(dir, modelName)
+	DockerImageID := helper.PushToDocker(dir, modelName, modelVersion)
 
 	var modelImage models.ModelImage
 	modelImage.ImageID = primitive.NewObjectID()
 	modelImage.DockerImageID = DockerImageID
 	modelImage.ModelID = modelID
+	modelImage.ModelVersion = modelVersion
 	modelImage.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 	_, err := modelCollectionImage.InsertOne(ctx, modelImage)
 
@@ -333,6 +341,7 @@ func GetModelInputByDockerImageID() gin.HandlerFunc {
 
 func HandlerPredict() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var uploadPath = os.TempDir()
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var inputData models.ModelInputDataTransfer
 
@@ -368,6 +377,16 @@ func HandlerPredict() gin.HandlerFunc {
 					if inputData.DataInputs[i].Type != modelInput.InputDetail[j].Type {
 						c.JSON(400, gin.H{"error": "Wrong Input Type"})
 						return
+					}
+					if inputData.DataInputs[i].Type == "image" {
+						str := fmt.Sprintf("%v", inputData.DataInputs[i].Data)
+						var x interface{} = uploadPath + "/" + str
+						// interface{uploadPath + inputData.DataInputs[i].Data}
+						inputData.DataInputs[i].Data = x
+						str = fmt.Sprintf("%v", inputData.DataInputs[i].Data)
+						dat, _ := os.ReadFile(str)
+
+						fmt.Print(string(dat))
 					}
 					predictBody["input"][modelInput.InputDetail[j].Name] = inputData.DataInputs[i].Data
 					break
@@ -414,37 +433,37 @@ func HandlerPredict() gin.HandlerFunc {
 		if err != nil {
 			fmt.Println(err)
 		}
-		// requestJSON, _ := json.Marshal(predictBody)
-		// req, reqerr := gohttp.NewRequest(
-		// 	"POST",
-		// 	modelPod.PredictURL,
-		// 	bytes.NewBuffer(requestJSON),
-		// )
+		requestJSON, _ := json.Marshal(predictBody)
+		req, reqerr := gohttp.NewRequest(
+			"POST",
+			modelPod.PredictURL,
+			bytes.NewBuffer(requestJSON),
+		)
 
-		// if reqerr != nil {
-		// 	log.Panic("Request creation failed")
-		// }
-		// req.Header.Set("Content-Type", "application/json")
-		// req.Header.Set("Accept", "application/json")
+		if reqerr != nil {
+			log.Panic("Request creation failed")
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
 
-		// // Get the response
-		// respPredict, resperr := gohttp.DefaultClient.Do(req)
-		// if resperr != nil {
-		// 	log.Panic("Request failed")
-		// }
+		// Get the response
+		respPredict, resperr := gohttp.DefaultClient.Do(req)
+		if resperr != nil {
+			log.Panic("Request failed")
+		}
 
-		// // Response body converted to stringified JSON
-		// respbody, _ := io.ReadAll(respPredict.Body)
+		// Response body converted to stringified JSON
+		respbody, _ := io.ReadAll(respPredict.Body)
 
-		// // Represents the response received from Github
-		// type PredictOutput struct {
-		// 	Status string `json:"status"`
-		// Output interface{} `json:"output"`
-		// }
+		// Represents the response received from Github
+		type PredictOutput struct {
+			Status string      `json:"status"`
+			Output interface{} `json:"output"`
+		}
 
-		// // Convert stringified JSON to a struct object of type githubAccessTokenResponse
-		// var predictResp PredictOutput
-		// json.Unmarshal(respbody, &predictResp)
+		// Convert stringified JSON to a struct object of type githubAccessTokenResponse
+		var predictResp PredictOutput
+		json.Unmarshal(respbody, &predictResp)
 
 		c.JSON(200, result)
 	}

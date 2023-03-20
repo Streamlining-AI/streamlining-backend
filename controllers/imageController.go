@@ -15,20 +15,13 @@ import (
 const maxUploadSize = 2 * 1024 * 1024 // 2 mb
 var uploadPath = os.TempDir()
 
-func main() {
-	r := gin.Default()
-	r.GET("/upload", uploadFileHandler())
-	r.StaticFS("/files", http.Dir(uploadPath))
-	r.Run(":8000")
-}
-
 func randToken(len int) string {
 	b := make([]byte, len)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
 }
 
-func uploadFileHandler() gin.HandlerFunc {
+func UploadFileHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// c.Request.ParseMultipartForm(maxUploadSize)
 		if err := c.Request.ParseMultipartForm(maxUploadSize); err != nil {
@@ -92,7 +85,7 @@ func uploadFileHandler() gin.HandlerFunc {
 			c.JSON(500, gin.H{})
 			return
 		}
-		c.JSON(200, gin.H{})
+		c.JSON(200, gin.H{"image_url": "/files/" + newFileName})
 
 	}
 }
