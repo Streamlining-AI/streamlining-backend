@@ -187,7 +187,7 @@ func HandlerDeployKube(DockerURL string, ImageID primitive.ObjectID, modelName s
 
 	helper.CreateDeploy(DockerURL, modelName)
 	helper.CreateService(modelName)
-	PredictURL, PodURL := helper.DeployKube(modelName)
+	PodURL, PredictURL := helper.DeployKube(modelName)
 
 	var modelPod models.ModelPod
 	modelPod.PodID = primitive.NewObjectID()
@@ -242,6 +242,7 @@ func GetModelByID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		id := c.Param("model_id")
+		docker_image := c.Param("docker_image_id")
 		modelID, _ := primitive.ObjectIDFromHex(id)
 		var foundModel models.ModelData
 
@@ -288,8 +289,12 @@ func GetModelByID() gin.HandlerFunc {
 		}
 
 		var modelInput models.ModelInput
+		if docker_image == "/" {
+			err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": foundImages[0].DockerImageID}).Decode(&modelInput)
+		} else {
+			err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": docker_image[1:]}).Decode(&modelInput)
+		}
 
-		err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": foundImages[0].DockerImageID}).Decode(&modelInput)
 		defer cancel()
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -341,7 +346,7 @@ func GetModelInputByDockerImageID() gin.HandlerFunc {
 
 func HandlerPredict() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var uploadPath = os.TempDir()
+		// var uploadPath = os.TempDir()
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var inputData models.ModelInputDataTransfer
 
@@ -378,16 +383,14 @@ func HandlerPredict() gin.HandlerFunc {
 						c.JSON(400, gin.H{"error": "Wrong Input Type"})
 						return
 					}
-					if inputData.DataInputs[i].Type == "image" {
-						str := fmt.Sprintf("%v", inputData.DataInputs[i].Data)
-						var x interface{} = uploadPath + "/" + str
-						// interface{uploadPath + inputData.DataInputs[i].Data}
-						inputData.DataInputs[i].Data = x
-						str = fmt.Sprintf("%v", inputData.DataInputs[i].Data)
-						dat, _ := os.ReadFile(str)
+					// if inputData.DataInputs[i].Type == "image" {
+					// 	str := fmt.Sprintf("%v", inputData.DataInputs[i].Data)
+					// 	var x interface{} = uploadPath + "/" + str
+					// 	// interface{uploadPath + inputData.DataInputs[i].Data}
+					// 	inputData.DataInputs[i].Data = x
+					// 	str = fmt.Sprintf("%v", inputData.DataInputs[i].Data)
 
-						fmt.Print(string(dat))
-					}
+					// }
 					predictBody["input"][modelInput.InputDetail[j].Name] = inputData.DataInputs[i].Data
 					break
 				}
@@ -421,7 +424,7 @@ func HandlerPredict() gin.HandlerFunc {
 		modelOutputData.ModelID = modelID
 		modelOutputData.ModelInputData = modelInputData
 
-		result, err := modelCollectionOutput.InsertOne(ctx, modelOutputData)
+		_, err = modelCollectionOutput.InsertOne(ctx, modelOutputData)
 		defer cancel()
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -436,7 +439,7 @@ func HandlerPredict() gin.HandlerFunc {
 		requestJSON, _ := json.Marshal(predictBody)
 		req, reqerr := gohttp.NewRequest(
 			"POST",
-			modelPod.PredictURL,
+			modelPod.PodURL,
 			bytes.NewBuffer(requestJSON),
 		)
 
@@ -465,7 +468,7 @@ func HandlerPredict() gin.HandlerFunc {
 		var predictResp PredictOutput
 		json.Unmarshal(respbody, &predictResp)
 
-		c.JSON(200, result)
+		c.JSON(200, predictResp)
 	}
 }
 
@@ -575,71 +578,3 @@ func HandlerReportModel() gin.HandlerFunc {
 		c.JSON(200, gin.H{"message": "Success"})
 	}
 }
-
-// func Predict() gin.HandlerFunc {
-// 	return func(c *gin.Context) {
-// 		var resp models.PredictBody
-
-// 		if err := c.BindJSON(&resp); err != nil {
-// 			c.JSON(400, gin.H{"error": err.Error()})
-// 			return
-// 		}
-
-// 		var foundModel models.Model
-// 		var foundModel1 models.Model
-// 		err := modelCollection.FindOne(context.TODO(), bson.M{"_id": resp.Id}).Decode(&foundModel)
-// 		if err != nil {
-// 			println(err)
-// 			return
-// 		}
-
-// 		output, err := json.Marshal(foundModel)
-// 		if err != nil {
-// 			panic(err)
-// 		}
-
-// 		json.Unmarshal(output, &foundModel1)
-// 		fmt.Println(foundModel1.PredictUrl)
-// 		data := map[string]map[string]string{
-// 			"input": {
-// 				"text": resp.Input,
-// 			},
-// 		}
-// 		requestJSON, _ := json.Marshal(data)
-
-// 		fmt.Println(string(requestJSON))
-// 		// POST request to set URL
-// 		req, reqerr := gohttp.NewRequest(
-// 			"POST",
-// 			foundModel1.PredictUrl,
-// 			bytes.NewBuffer(requestJSON),
-// 		)
-
-// 		if reqerr != nil {
-// 			log.Panic("Request creation failed")
-// 		}
-// 		req.Header.Set("Content-Type", "application/json")
-// 		req.Header.Set("Accept", "application/json")
-
-// 		// Get the response
-// 		respPredict, resperr := gohttp.DefaultClient.Do(req)
-// 		if resperr != nil {
-// 			log.Panic("Request failed")
-// 		}
-
-// 		// Response body converted to stringified JSON
-// 		respbody, _ := io.ReadAll(respPredict.Body)
-
-// 		// Represents the response received from Github
-// 		type PredictOutput struct {
-// 			Status string `json:"status"`
-// 			Output string `json:"output"`
-// 		}
-
-// 		// Convert stringified JSON to a struct object of type githubAccessTokenResponse
-// 		var predictResp PredictOutput
-// 		json.Unmarshal(respbody, &predictResp)
-
-// 		c.JSON(200, predictResp)
-// 	}
-// }

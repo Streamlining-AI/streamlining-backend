@@ -311,6 +311,6 @@ func DeployKube(Name string) (string, string) {
 		log.Fatal(err)
 	}
 	fmt.Println(GetPredictUrlCmd)
-
-	return string(GetPredictUrlCmd), string(GetPredictUrlCmd) + "/predictions"
+	PodURL := strings.Trim(string(GetPredictUrlCmd), "\n")
+	return PodURL, PodURL + "/predictions"
 }
