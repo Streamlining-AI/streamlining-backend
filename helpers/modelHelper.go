@@ -117,7 +117,7 @@ func PushToDocker(folderName string, name string, modelVersion string) string {
 	return imageTag
 }
 
-func CreateDeploy(URL string, Name string) {
+func CreateDeploy(URL string, Name string, ServiceName string) {
 	type MetadataStruct struct {
 		Name string `yaml:"name"`
 	}
@@ -183,7 +183,7 @@ func CreateDeploy(URL string, Name string) {
 		Kind:       "Deployment",
 		ApiVersion: "apps/v1",
 		Metadata: MetadataStruct{
-			Name: Name + "-service",
+			Name: ServiceName + "-service",
 		},
 		Spec: SpecStruct{
 			Replicas: 1,
@@ -229,7 +229,7 @@ func CreateDeploy(URL string, Name string) {
 	}
 }
 
-func CreateService(Name string) {
+func CreateService(Name string, ServiceName string) {
 	type LabelsStruct struct {
 		App string `yaml:"app"`
 	}
@@ -266,7 +266,7 @@ func CreateService(Name string) {
 		ApiVersion: "v1",
 		Kind:       "Service",
 		Metadata: MetadataStruct{
-			Name: Name + "-service",
+			Name: ServiceName + "-service",
 			Labels: LabelsStruct{
 				App: Name,
 			},

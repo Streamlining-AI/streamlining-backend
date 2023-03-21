@@ -30,6 +30,14 @@ type Message struct {
 	Input string `json:"input"`
 }
 
+type ModelUpdateTransfer struct {
+	Name          string `json:"name"`
+	ModelID       string `json:"model_id"`
+	GithubURL     string `json:"github_url"`
+	GithubCode    string `json:"github_code"`
+	Model_Version string `json:"model_version"`
+}
+
 type ModelDataTransfer struct {
 	Name          string `json:"name"`
 	Type          string `json:"type"`

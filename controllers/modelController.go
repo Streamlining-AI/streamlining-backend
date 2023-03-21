@@ -10,6 +10,7 @@ import (
 	gohttp "net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Streamlining-AI/streamlining-backend/database"
@@ -36,6 +37,7 @@ func HandlerUpload() gin.HandlerFunc {
 		if err != nil {
 			log.Fatal(err)
 		}
+		helper.CreateAndGetDir("repos")
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var reqModel models.ModelDataTransfer
 		defer cancel()
@@ -104,8 +106,9 @@ func HandlerUpload() gin.HandlerFunc {
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		err = HandlerDeployKube(DockerURL, ImageID, model.Name)
+		modelVersion := strings.ReplaceAll(reqModel.Model_Version, ".", "-")
+		serviceName := strings.ToLower(reqModel.Name) + modelVersion
+		err = HandlerDeployKube(DockerURL, ImageID, strings.ToLower(reqModel.Name), serviceName)
 
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Error during handling kubernetes "})
@@ -196,12 +199,12 @@ func HandlerDeployDocker(dir string, modelName string, modelID primitive.ObjectI
 	return modelImage.ImageID, DockerImageID, nil
 }
 
-func HandlerDeployKube(DockerURL string, ImageID primitive.ObjectID, modelName string) error {
+func HandlerDeployKube(DockerURL string, ImageID primitive.ObjectID, modelName string, serviceName string) error {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
-	helper.CreateDeploy(DockerURL, modelName)
-	helper.CreateService(modelName)
-	PodURL, PredictURL := helper.DeployKube(modelName)
+	helper.CreateDeploy(DockerURL, modelName, serviceName)
+	helper.CreateService(modelName, serviceName)
+	PodURL, PredictURL := helper.DeployKube(serviceName)
 
 	var modelPod models.ModelPod
 	modelPod.PodID = primitive.NewObjectID()
@@ -523,6 +526,73 @@ func GetAllOutputHistory() gin.HandlerFunc {
 }
 func HandlerUpdateModel() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		err := os.RemoveAll("repos/")
+		helper.CreateAndGetDir("repos")
+		if err != nil {
+			log.Fatal(err)
+		}
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		var reqModel models.ModelUpdateTransfer
+		defer cancel()
+		if err := c.BindJSON(&reqModel); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		var model models.ModelData
+		model.ModelID, _ = primitive.ObjectIDFromHex(reqModel.ModelID)
+		model.GithubURL = reqModel.GithubURL
+		model.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		update := bson.D{{Key: "$set", Value: bson.D{{Key: "updated_at", Value: model.UpdatedAt}}}}
+		_, err = modelCollection.UpdateByID(ctx, bson.M{"model_id": model.ModelID}, update)
+		defer cancel()
+		if err != nil {
+			fmt.Print(err)
+		}
+		// githubCode := reqModel.GithubCode
+
+		// claims, _ := helper.DecodeToken(githubCode)
+		dir := "repos/" + reqModel.Name
+
+		_, err = git.PlainClone(dir, false, &git.CloneOptions{
+			// Auth: &http.BasicAuth{
+			// 	Username: "arbruzaz",
+			// 	Password: claims.AccessToken,
+			// },
+			URL:               model.GithubURL,
+			RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
+		})
+		if err != nil {
+			c.JSON(500, gin.H{"message": "Cannot Get data"})
+			return
+		}
+
+		ImageID, DockerURL, err := HandlerDeployDocker(dir, reqModel.Name, model.ModelID, reqModel.Model_Version)
+		if err != nil {
+			c.JSON(500, gin.H{"message": "Error during handling docker image"})
+			return
+		}
+
+		err = HandlerConfig(dir, model.ModelID, DockerURL)
+		if err != nil {
+			c.JSON(400, gin.H{"message": "Cannot create config"})
+			return
+		}
+
+		err = os.RemoveAll("repos/" + model.Name)
+		if err != nil {
+			log.Fatal(err)
+		}
+		modelVersion := strings.ReplaceAll(reqModel.Model_Version, ".", "-")
+		serviceName := strings.ToLower(reqModel.Name) + modelVersion
+		err = HandlerDeployKube(DockerURL, ImageID, strings.ToLower(reqModel.Name), serviceName)
+
+		if err != nil {
+			c.JSON(500, gin.H{"message": "Error during handling kubernetes "})
+			return
+		}
+
+		c.JSON(200, gin.H{"message": "Clone Successful"})
 
 	}
 }

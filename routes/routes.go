@@ -23,4 +23,6 @@ func UserRoutes(incomingRoutes *gin.Engine) {
 	incomingRoutes.POST("/model/report", controller.HandlerReportModel())
 	incomingRoutes.POST("/upload", controller.UploadFileHandler())
 	incomingRoutes.StaticFS("/files", http.Dir("data/images"))
+	incomingRoutes.PUT("/model/", controller.HandlerUpdateModel())
+
 }
