@@ -32,6 +32,10 @@ var modelCollectionOutput *mongo.Collection = database.OpenCollection(database.C
 
 func HandlerUpload() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		err := os.RemoveAll("repos/")
+		if err != nil {
+			log.Fatal(err)
+		}
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var reqModel models.ModelDataTransfer
 		defer cancel()
@@ -46,21 +50,18 @@ func HandlerUpload() gin.HandlerFunc {
 		model.Type = reqModel.Type
 		model.IsVisible = reqModel.IsVisible
 		model.GithubURL = reqModel.GithubURL
-		model.Description = reqModel.Description
+
 		model.PredictRecordCount = 0
 		model.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		model.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		model.UserID, _ = primitive.ObjectIDFromHex(reqModel.UserID)
-		_, err := modelCollection.InsertOne(ctx, model)
+		model.Banner = reqModel.Banner
 
-		defer cancel()
-		if err != nil {
-			fmt.Print(err)
-		}
 		// githubCode := reqModel.GithubCode
 
 		// claims, _ := helper.DecodeToken(githubCode)
 		dir := "repos/" + model.Name
+		descriptDir := "repos/" + model.Name + "/README.md"
 
 		_, err = git.PlainClone(dir, false, &git.CloneOptions{
 			// Auth: &http.BasicAuth{
@@ -73,6 +74,19 @@ func HandlerUpload() gin.HandlerFunc {
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Cannot Get data"})
 			return
+		}
+
+		description, err := helper.ReadFile(descriptDir)
+		if err != nil {
+			c.JSON(500, gin.H{"message": "Cannot Get data"})
+			return
+		}
+		model.Description = string(description)
+
+		_, err = modelCollection.InsertOne(ctx, model)
+		defer cancel()
+		if err != nil {
+			fmt.Print(err)
 		}
 		ImageID, DockerURL, err := HandlerDeployDocker(dir, model.Name, model.ModelID, reqModel.Model_Version)
 		if err != nil {

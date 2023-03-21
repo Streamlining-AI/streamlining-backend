@@ -1,0 +1,21 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: modeltest45-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: modeltest45
+  template:
+    metadata:
+      labels:
+        app: modeltest45
+    spec:
+      containers:
+      - name: modeltest45
+        image: core.harbor.domain/library/modeltest45:v1.1
+        ports:
+        - containerPort: 5000
+      imagePullSecrets:
+      - name: regcred

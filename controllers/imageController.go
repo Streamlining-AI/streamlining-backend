@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
+	helper "github.com/Streamlining-AI/streamlining-backend/helpers"
 	"github.com/gin-gonic/gin"
 )
 
 const maxUploadSize = 2 * 1024 * 1024 // 2 mb
-var uploadPath = os.TempDir()
 
 func randToken(len int) string {
 	b := make([]byte, len)
@@ -70,6 +70,12 @@ func UploadFileHandler() gin.HandlerFunc {
 			return
 		}
 
+		uploadPath, err := helper.CreateAndGetDir("data/images")
+
+		if err != nil {
+			c.JSON(500, gin.H{})
+			return
+		}
 		newFileName := fileName + fileEndings[0]
 		newPath := filepath.Join(uploadPath, newFileName)
 		fmt.Printf("FileType: %s, File: %s\n", detectedFileType, newPath)

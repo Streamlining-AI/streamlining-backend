@@ -35,11 +35,11 @@ type ModelDataTransfer struct {
 	Type          string `json:"type"`
 	IsVisible     bool   `json:"is_visible"`
 	GithubURL     string `json:"github_url"`
-	Description   string `json:"description"`
 	UserID        string `json:"user_id"`
 	OutputType    string `json:"output_type"`
 	GithubCode    string `json:"github_code"`
 	Model_Version string `json:"model_version"`
+	Banner        string `json:"banner_url"`
 }
 
 type ModelData struct {
@@ -54,6 +54,7 @@ type ModelData struct {
 	UpdatedAt          time.Time          `bson:"updated_at" json:"updated_at"`
 	UserID             primitive.ObjectID `bson:"user_id" json:"user_id"`
 	OutputType         string             `bson:"output_type" json:"output_type"`
+	Banner             string             `bson:"banner_url" json:"banner_url"`
 }
 
 type ModelImage struct {
