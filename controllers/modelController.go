@@ -448,14 +448,6 @@ func HandlerPredict() gin.HandlerFunc {
 		modelInputData.DockerImageID = inputData.DockerImageID
 		modelInputData.DataInputs = inputData.DataInputs
 
-		var modelOutputData models.ModelOutputData
-		modelOutputData.ModelOutputID = primitive.NewObjectID()
-		modelOutputData.Output = "Output1"
-		modelOutputData.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		modelOutputData.ModelID = modelID
-		modelOutputData.ModelInputData = modelInputData
-
-		_, err = modelCollectionOutput.InsertOne(ctx, modelOutputData)
 		defer cancel()
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -525,6 +517,17 @@ func HandlerPredict() gin.HandlerFunc {
 			log.Fatal(err)
 		}
 
+		var modelOutputData models.ModelOutputData
+		modelOutputData.ModelOutputID = primitive.NewObjectID()
+		modelOutputData.Output = "/files/" + fileName
+		modelOutputData.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		modelOutputData.ModelID = modelID
+		modelOutputData.ModelInputData = modelInputData
+
+		_, err = modelCollectionOutput.InsertOne(ctx, modelOutputData)
+		if err != nil {
+			log.Fatal(err)
+		}
 		c.JSON(200, gin.H{"output": "/files/" + fileName})
 	}
 }
