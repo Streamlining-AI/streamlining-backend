@@ -19,6 +19,13 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"gopkg.in/yaml.v2"
+
+	v1d "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 func PushToDocker(folderName string, name string, modelVersion string) string {
@@ -117,7 +124,7 @@ func PushToDocker(folderName string, name string, modelVersion string) string {
 	return imageTag
 }
 
-func CreateDeploy(URL string, Name string, ServiceName string) {
+func CreateDeploy1(URL string, Name string, ServiceName string) {
 	type MetadataStruct struct {
 		Name string `yaml:"name"`
 	}
@@ -229,7 +236,7 @@ func CreateDeploy(URL string, Name string, ServiceName string) {
 	}
 }
 
-func CreateService(Name string, ServiceName string) {
+func CreateService1(Name string, ServiceName string) {
 	type LabelsStruct struct {
 		App string `yaml:"app"`
 	}
@@ -306,7 +313,161 @@ func DeployKube(Name string) (string, string) {
 	}
 	fmt.Println(DeployToKubeCmd)
 
-	GetPredictUrlCmd, err := exec.Command("minikube", "service", "--url", Name+"-service").Output()
+	GetPredictUrlCmd, err := exec.Command("minikube", "service", "--url", Name).Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(GetPredictUrlCmd)
+	PodURL := strings.Trim(string(GetPredictUrlCmd), "\n")
+	return PodURL, PodURL + "/predictions"
+}
+
+func CreateService(name string, serviceName string) error {
+	// Use the current context in kubeconfig
+	homeDir := os.Getenv("HOME")
+	config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	if err != nil {
+		return err
+	}
+
+	// Create the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	// Create the Service object
+	service := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: serviceName + "-service",
+			Labels: map[string]string{
+				"app": name,
+			},
+		},
+		Spec: v1.ServiceSpec{
+			Type: "LoadBalancer",
+			Ports: []v1.ServicePort{
+				{
+					Port:       5000,
+					TargetPort: intstr.FromInt(5000),
+					Protocol:   "TCP",
+				},
+			},
+			Selector: map[string]string{
+				"app": name,
+			},
+		},
+	}
+
+	// Create the Service
+	_, err = clientset.CoreV1().Services("default").Create(context.TODO(), service, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func CreateDeployment(name, serviceName, imageURL string) error {
+	// Use the current context in kubeconfig
+	homeDir := os.Getenv("HOME")
+	config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	if err != nil {
+		return err
+	}
+
+	// Create the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	// Define the Deployment object
+	deployment := &v1d.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: serviceName + "-service",
+			Labels: map[string]string{
+				"app": name,
+			},
+		},
+		Spec: v1d.DeploymentSpec{
+			Replicas: int32Ptr(1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": name,
+				},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": name,
+					},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  name,
+							Image: imageURL,
+							Ports: []v1.ContainerPort{
+								{
+									ContainerPort: 5000,
+								},
+							},
+						},
+					},
+					ImagePullSecrets: []v1.LocalObjectReference{
+						{
+							Name: "regcred",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create the Deployment
+	_, err = clientset.AppsV1().Deployments("default").Create(context.TODO(), deployment, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func DeleteDeploymentAndService(deploymentName string, serviceName string) error {
+	// Use the current context in kubeconfig
+	homeDir := os.Getenv("HOME")
+	config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	if err != nil {
+		return err
+	}
+
+	// Create the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	// Delete the Deployment
+	err = clientset.AppsV1().Deployments("default").Delete(context.TODO(), deploymentName, metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Delete the Service
+	err = clientset.CoreV1().Services("default").Delete(context.TODO(), serviceName, metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func int32Ptr(i int32) *int32 { return &i }
+
+func GetServiceURL(name string) (string, string) {
+	// Use the current context in kubeconfig
+	GetPredictUrlCmd, err := exec.Command("minikube", "service", "--url", name+"-service").Output()
 	if err != nil {
 		log.Fatal(err)
 	}

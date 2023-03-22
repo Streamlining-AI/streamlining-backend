@@ -3,8 +3,10 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image/png"
 	"io"
 	"log"
 	gohttp "net/http"
@@ -202,9 +204,21 @@ func HandlerDeployDocker(dir string, modelName string, modelID primitive.ObjectI
 func HandlerDeployKube(DockerURL string, ImageID primitive.ObjectID, modelName string, serviceName string) error {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
-	helper.CreateDeploy(DockerURL, modelName, serviceName)
-	helper.CreateService(modelName, serviceName)
-	PodURL, PredictURL := helper.DeployKube(serviceName)
+	err := helper.CreateDeployment(modelName, serviceName, DockerURL)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Deployment created successfully.")
+
+	err = helper.CreateService(modelName, serviceName)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Service created successfully.")
+
+	PodURL, PredictURL := helper.GetServiceURL(serviceName)
+	fmt.Println("Get URL successfully.")
+	// PodURL, PredictURL := helper.DeployKube(serviceName)
 
 	var modelPod models.ModelPod
 	modelPod.PodID = primitive.NewObjectID()
@@ -213,7 +227,7 @@ func HandlerDeployKube(DockerURL string, ImageID primitive.ObjectID, modelName s
 	modelPod.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 	modelPod.ImageID = ImageID
 
-	_, err := modelCollectionPod.InsertOne(ctx, modelPod)
+	_, err = modelCollectionPod.InsertOne(ctx, modelPod)
 
 	defer cancel()
 	if err != nil {
@@ -456,7 +470,7 @@ func HandlerPredict() gin.HandlerFunc {
 		requestJSON, _ := json.Marshal(predictBody)
 		req, reqerr := gohttp.NewRequest(
 			"POST",
-			modelPod.PodURL,
+			modelPod.PredictURL,
 			bytes.NewBuffer(requestJSON),
 		)
 
@@ -485,7 +499,33 @@ func HandlerPredict() gin.HandlerFunc {
 		var predictResp PredictOutput
 		json.Unmarshal(respbody, &predictResp)
 
-		c.JSON(200, predictResp)
+		imgBase64 := strings.TrimPrefix(predictResp.Output.(string), "data:image/png;base64,")
+		imgBytes, err := base64.StdEncoding.DecodeString(imgBase64)
+		if err != nil {
+			log.Fatal(err)
+		}
+		img, err := png.Decode(bytes.NewReader(imgBytes))
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Now you can use the decoded image object as needed
+		// For example, you can encode it as a PNG and write it to a file
+		uploadPath, err := helper.CreateAndGetDir("data/images/")
+		if err != nil {
+			log.Fatal(err)
+		}
+		var fileName = RandToken(12) + ".png"
+		out, err := os.Create(uploadPath + fileName)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer out.Close()
+		err = png.Encode(out, img)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		c.JSON(200, gin.H{"output": "/files/" + fileName})
 	}
 }
 
@@ -524,6 +564,7 @@ func GetAllOutputHistory() gin.HandlerFunc {
 		c.JSON(200, ModelOutputDatas)
 	}
 }
+
 func HandlerUpdateModel() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		err := os.RemoveAll("repos/")
@@ -596,6 +637,7 @@ func HandlerUpdateModel() gin.HandlerFunc {
 
 	}
 }
+
 func HandlerDeleteModel() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("model_id")
@@ -613,7 +655,50 @@ func HandlerDeleteModel() gin.HandlerFunc {
 			return
 		}
 
-		err = modelCollectionInputDetail.FindOneAndDelete(context.TODO(), bson.M{"model_id": modelID}).Decode(&deletedDocument)
+		var foundImages []models.ModelImage
+		findOptions := options.Find()
+
+		cur, err := modelCollectionImage.Find(context.TODO(), bson.M{"model_id": modelID}, findOptions)
+		if err != nil {
+			println(err)
+			return
+		}
+
+		for cur.Next(context.TODO()) {
+			//Create a value into which the single document can be decoded
+			var elem models.ModelImage
+			err := cur.Decode(&elem)
+			if err != nil {
+				fmt.Print(err)
+			}
+
+			foundImages = append(foundImages, elem)
+		}
+		if err := cur.Err(); err != nil {
+			fmt.Print(err)
+		}
+
+		//Close the cursor once finished
+		cur.Close(context.TODO())
+		for i := 0; i < len(foundImages); i++ {
+			lastSlashIndex := strings.LastIndex(foundImages[i].DockerImageID, "/")
+			if lastSlashIndex >= 0 {
+				imageName := strings.Replace(foundImages[i].DockerImageID[lastSlashIndex+1:], ":", "", 1)
+				imageName = strings.ReplaceAll(imageName, ".", "-")
+				imageName = imageName + "-service"
+				err := helper.DeleteDeploymentAndService(imageName, imageName)
+				if err != nil {
+					fmt.Print(err)
+				}
+			}
+
+			_, err = modelCollectionPod.DeleteOne(context.TODO(), bson.M{"image_id": foundImages[i].ImageID})
+			if err != nil {
+				fmt.Print(err)
+			}
+		}
+
+		_, err = modelCollectionInputDetail.DeleteMany(context.TODO(), bson.M{"model_id": modelID})
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				c.JSON(200, gin.H{"message": "No matched document"})
@@ -623,18 +708,16 @@ func HandlerDeleteModel() gin.HandlerFunc {
 			return
 		}
 
-		err = modelCollectionImage.FindOneAndDelete(context.TODO(), bson.M{"model_id": modelID}).Decode(&deletedDocument)
+		_, err = modelCollectionImage.DeleteMany(context.TODO(), bson.M{"model_id": modelID})
 		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				c.JSON(200, gin.H{"message": "No matched document"})
-				return
-			}
 			c.JSON(500, err)
 			return
 		}
 		c.JSON(200, gin.H{"message": "Success"})
+
 	}
 }
+
 func HandlerReportModel() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)

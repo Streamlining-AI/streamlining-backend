@@ -15,7 +15,7 @@ import (
 
 const maxUploadSize = 2 * 1024 * 1024 // 2 mb
 
-func randToken(len int) string {
+func RandToken(len int) string {
 	b := make([]byte, len)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
@@ -63,7 +63,7 @@ func UploadFileHandler() gin.HandlerFunc {
 			c.JSON(400, gin.H{})
 			return
 		}
-		fileName := randToken(12)
+		fileName := RandToken(12)
 		fileEndings, err := mime.ExtensionsByType(detectedFileType)
 		if err != nil {
 			c.JSON(500, gin.H{})
