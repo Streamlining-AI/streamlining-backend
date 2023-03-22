@@ -515,7 +515,7 @@ func HandlerPredict() gin.HandlerFunc {
 			log.Fatal(err)
 		}
 		var fileName = RandToken(12) + ".png"
-		out, err := os.Create(uploadPath + fileName)
+		out, err := os.Create(uploadPath + "/" + fileName)
 		if err != nil {
 			log.Fatal(err)
 		}
