@@ -26,7 +26,7 @@ func UploadFileHandler() gin.HandlerFunc {
 		// c.Request.ParseMultipartForm(maxUploadSize)
 		if err := c.Request.ParseMultipartForm(maxUploadSize); err != nil {
 			fmt.Printf("Could not parse multipart form: %v\n", err)
-			c.JSON(400, gin.H{})
+			c.JSON(400, gin.H{"message": "Could not parse multipart form: %v"})
 			return
 		}
 
@@ -34,7 +34,7 @@ func UploadFileHandler() gin.HandlerFunc {
 		// parse and validate file and post parameters
 		file, fileHeader, err := c.Request.FormFile("uploadFile")
 		if err != nil {
-			c.JSON(400, gin.H{})
+			c.JSON(400, gin.H{"message": "Could not get upload header."})
 			return
 		}
 		defer file.Close()
@@ -43,12 +43,12 @@ func UploadFileHandler() gin.HandlerFunc {
 		fmt.Printf("File size (bytes): %v\n", fileSize)
 		// validate file size
 		if fileSize > maxUploadSize {
-			c.JSON(400, gin.H{})
+			c.JSON(400, gin.H{"message": "Image file size > 2mb."})
 			return
 		}
 		fileBytes, err := io.ReadAll(file)
 		if err != nil {
-			c.JSON(400, gin.H{})
+			c.JSON(400, gin.H{"message": "Could not read file."})
 			return
 		}
 
@@ -60,20 +60,20 @@ func UploadFileHandler() gin.HandlerFunc {
 		case "application/pdf":
 			break
 		default:
-			c.JSON(400, gin.H{})
+			c.JSON(400, gin.H{"message": "File is not image."})
 			return
 		}
 		fileName := RandToken(12)
 		fileEndings, err := mime.ExtensionsByType(detectedFileType)
 		if err != nil {
-			c.JSON(500, gin.H{})
+			c.JSON(500, gin.H{"message": "Failed to upload."})
 			return
 		}
 
 		uploadPath, err := helper.CreateAndGetDir("data/images")
 
 		if err != nil {
-			c.JSON(500, gin.H{})
+			c.JSON(500, gin.H{"message": "Failed to upload."})
 			return
 		}
 		newFileName := fileName + fileEndings[0]
@@ -83,12 +83,12 @@ func UploadFileHandler() gin.HandlerFunc {
 		// write file
 		newFile, err := os.Create(newPath)
 		if err != nil {
-			c.JSON(500, gin.H{})
+			c.JSON(500, gin.H{"message": "Failed to upload."})
 			return
 		}
 		defer newFile.Close() // idempotent, okay to call twice
 		if _, err := newFile.Write(fileBytes); err != nil || newFile.Close() != nil {
-			c.JSON(500, gin.H{})
+			c.JSON(500, gin.H{"message": "Failed to upload."})
 			return
 		}
 		c.JSON(200, gin.H{"image_url": "/files/" + newFileName})
