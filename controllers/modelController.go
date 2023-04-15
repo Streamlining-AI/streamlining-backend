@@ -69,7 +69,7 @@ func HandlerUpload() gin.HandlerFunc {
 
 		_, err = git.PlainClone(dir, false, &git.CloneOptions{
 			// Auth: &http.BasicAuth{
-			// 	Username: "arbruzaz",
+			// 	Username: claims.Username,
 			// 	Password: claims.AccessToken,
 			// },
 			URL:               model.GithubURL,
