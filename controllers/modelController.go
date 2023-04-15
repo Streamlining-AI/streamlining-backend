@@ -216,7 +216,7 @@ func HandlerDeployKube(DockerURL string, ImageID primitive.ObjectID, modelName s
 	}
 	fmt.Println("Service created successfully.")
 
-	PodURL, PredictURL := helper.GetServiceURL(serviceName)
+	PodURL, PredictURL, _ := helper.GetServiceURL(serviceName)
 	fmt.Println("Get URL successfully.")
 	// PodURL, PredictURL := helper.DeployKube(serviceName)
 

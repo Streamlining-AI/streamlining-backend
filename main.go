@@ -36,12 +36,8 @@ func main() {
 
 	// router.Use(middleware.Authentication())
 
-	// API-2
-
-	// API-1
-	router.GET("/api-2", func(c *gin.Context) {
-		c.JSON(200, gin.H{"success": "Access granted for api-2"})
-	})
+	routes.ImageRoutes(router)
+	routes.ModelRoutes(router)
 
 	router.GET("/users/logout", controller.Logout())
 

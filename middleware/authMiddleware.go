@@ -18,14 +18,14 @@ func Authentication() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		claims, errr := helper.ValidateToken(clientToken)
+		claims, errr := helper.DecodeToken(clientToken)
 		if errr != "" {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 			c.Abort()
 			return
 		}
 
-		c.Set("email", claims.Email)
+		c.Set("username", claims.Username)
 		c.Set("uid", claims.Uid)
 
 		c.Next()

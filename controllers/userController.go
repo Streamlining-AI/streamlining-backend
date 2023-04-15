@@ -153,7 +153,7 @@ func Logout() gin.HandlerFunc {
 	}
 }
 
-func RegisterGithub(userName string, userId string) error {
+func RegisterGithub(userName string, userId string) (string, error) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
 	var user models.UserGithub
@@ -166,16 +166,16 @@ func RegisterGithub(userName string, userId string) error {
 
 	defer cancel()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	_, insertErr := userCollectionGithub.InsertOne(ctx, user)
 	defer cancel()
 	if insertErr != nil {
-		return insertErr
+		return "", insertErr
 	}
 
-	return nil
+	return user.ID.String(), nil
 }
 
 func GithubLoginHandler() gin.HandlerFunc {
@@ -218,14 +218,28 @@ func GithubCallbackHandler() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Bad Credentials"})
 			return
 		}
-		userData := strings.Split(githubData, ",")
-		userName := strings.Split(userData[0], ":")
-		userName1 := strings.Trim(userName[1], `"`)
+		var data map[string]interface{}
 
-		userId := strings.Split(userData[1], ":")
-		userId1 := userId[1]
+		// Unmarshal the JSON string into the data map
+		err := json.Unmarshal([]byte(githubData), &data)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-		count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": userName1})
+		username := data["login"]
+		githubID := data["id"]
+		githubID = int(githubID.(float64))
+
+		strUsername := fmt.Sprintf("%v", username)
+		strGithubID := fmt.Sprintf("%d", githubID)
+
+		token, err := helper.EncodeToken(githubAccessToken, strGithubID, strUsername)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
+		}
+		count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": strUsername})
 
 		defer cancel()
 		if err != nil {
@@ -233,35 +247,62 @@ func GithubCallbackHandler() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, msg)
 			return
 		}
-
+		var userID string
+		var user models.UserGithub
 		if count == 0 {
 
-			err = RegisterGithub(userName1, userId1)
+			userID, err = RegisterGithub(strUsername, strGithubID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 				return
 			}
 
+		} else {
+			err := userCollectionGithub.FindOne(ctx, bson.M{"username": strUsername}).Decode(&user)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				return
+			}
+			userID = user.ID.String()
 		}
 
-		// var foundUser models.UserGithub
+		// ====================================================================================
+		/*
+			userData := strings.Split(githubData, ",")
+			userName := strings.Split(userData[0], ":")
+			userName1 := strings.Trim(userName[1], `"`)
 
-		// err = userCollection.FindOne(ctx, bson.M{"user_id": userId1}).Decode(&foundUser)
-		// defer cancel()
-		// if err != nil {
-		// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found"})
-		// 	return
-		// }
+			userId := strings.Split(userData[1], ":")
+			userId1 := userId[1]
 
-		token, err := helper.EncodeToken(githubAccessToken, userId1)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
-			return
-		}
-		// claims, _ := helper.DecodeToken(token)
+			count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": userName1})
+
+			defer cancel()
+			if err != nil {
+				msg := "error occured while checking for the username"
+				c.JSON(http.StatusBadRequest, msg)
+				return
+			}
+
+			if count == 0 {
+
+				err = RegisterGithub(userName1, userId1)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+					return
+				}
+
+			}
+			token, err := helper.EncodeToken(githubAccessToken, userId1)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				return
+			}
+		*/
+		// =================================================================
 		c.SetSameSite(http.SameSiteNoneMode)
-		c.SetCookie("token", token, 3600, "/", "localhost:3000", true, true)
-		c.JSON(http.StatusOK, gin.H{"token": token, "ID": userId1, "username": userName1})
+		c.SetCookie("token", token, 1000*60*60*24, "/", "localhost:3000", true, true)
+		c.JSON(http.StatusOK, gin.H{"token": token, "ID": userID, "username": strUsername})
 	}
 }
 

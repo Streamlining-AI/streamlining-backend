@@ -465,7 +465,7 @@ func DeleteDeploymentAndService(deploymentName string, serviceName string) error
 
 func int32Ptr(i int32) *int32 { return &i }
 
-func GetServiceURL(name string) (string, string) {
+func GetServiceURL(name string) (string, string, error) {
 	// Use the current context in kubeconfig
 	GetPredictUrlCmd, err := exec.Command("minikube", "service", "--url", name+"-service").Output()
 	if err != nil {
@@ -473,5 +473,33 @@ func GetServiceURL(name string) (string, string) {
 	}
 	fmt.Println(GetPredictUrlCmd)
 	PodURL := strings.Trim(string(GetPredictUrlCmd), "\n")
-	return PodURL, PodURL + "/predictions"
+	homeDir := os.Getenv("HOME")
+	kubeConfig, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	// Get the Kubernetes config
+	// kubeConfig, err = rest.InClusterConfig()
+	// if err != nil {
+	// 	kubeConfig, err = clientcmd.BuildConfigFromFlags("", "path/to/kubeconfig")
+	// 	if err != nil {
+	// 		return "", "", err
+	// 	}
+	// }
+
+	// Create a Kubernetes client
+	clientset, err := kubernetes.NewForConfig(kubeConfig)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Get the service
+	service, err := clientset.CoreV1().Services("default").Get(context.TODO(), name+"-service", metav1.GetOptions{})
+	if err != nil {
+		return "", "", err
+	}
+
+	// Get the service URL
+	port := service.Spec.Ports[0].Port
+	url := fmt.Sprintf("http://%s:%d", service.Spec.ClusterIP, port)
+
+	fmt.Print(url)
+	return PodURL, PodURL + "/predictions", nil
 }
