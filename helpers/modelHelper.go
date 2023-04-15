@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -324,8 +325,7 @@ func DeployKube(Name string) (string, string) {
 
 func CreateService(name string, serviceName string) error {
 	// Use the current context in kubeconfig
-	homeDir := os.Getenv("HOME")
-	config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	config, err := GetKubeConfig()
 	if err != nil {
 		return err
 	}
@@ -370,8 +370,7 @@ func CreateService(name string, serviceName string) error {
 
 func CreateDeployment(name, serviceName, imageURL string) error {
 	// Use the current context in kubeconfig
-	homeDir := os.Getenv("HOME")
-	config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	config, err := GetKubeConfig()
 	if err != nil {
 		return err
 	}
@@ -436,8 +435,7 @@ func CreateDeployment(name, serviceName, imageURL string) error {
 
 func DeleteDeploymentAndService(deploymentName string, serviceName string) error {
 	// Use the current context in kubeconfig
-	homeDir := os.Getenv("HOME")
-	config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	config, err := GetKubeConfig()
 	if err != nil {
 		return err
 	}
@@ -473,16 +471,11 @@ func GetServiceURL(name string) (string, string, error) {
 	}
 	fmt.Println(GetPredictUrlCmd)
 	PodURL := strings.Trim(string(GetPredictUrlCmd), "\n")
-	homeDir := os.Getenv("HOME")
-	kubeConfig, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
-	// Get the Kubernetes config
-	// kubeConfig, err = rest.InClusterConfig()
-	// if err != nil {
-	// 	kubeConfig, err = clientcmd.BuildConfigFromFlags("", "path/to/kubeconfig")
-	// 	if err != nil {
-	// 		return "", "", err
-	// 	}
-	// }
+
+	kubeConfig, err := GetKubeConfig()
+	if err != nil {
+		return "", "", err
+	}
 
 	// Create a Kubernetes client
 	clientset, err := kubernetes.NewForConfig(kubeConfig)
@@ -502,4 +495,14 @@ func GetServiceURL(name string) (string, string, error) {
 
 	fmt.Print(url)
 	return PodURL, PodURL + "/predictions", nil
+}
+
+func GetKubeConfig() (*rest.Config, error) {
+	// Use the current context in kubeconfig
+	homeDir := os.Getenv("HOME")
+	config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
 }
