@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-env-vars
+type: Opaque
+data:
+  .env: UE9SVD04MDAwCk1PTkdPREJfVVJMPW1vbmdvZGI6Ly9sbndtaGVlMDA3Omxud2JvYXQwMDdAbW9uZ29kYi1zZXJ2aWNlOjI3MDE3ClNFQ1JFVF9LRVk9Qm9hdApDTElFTlRfSUQ9NTVkYjVlZGMwMWRjODk2NmM1Y2EKQ0xJRU5UX1NFQ1JFVD1lMGRlYzJkMjMzYmMzOTBhNTdiYmI2ZThkYTMzNmFiODI1NDgxMTAxCkNMVVNURVJfREI9Y2x1c3RlcjAKTUlOSU9fVVJMPW1pbmlvOjkwMDAKTUlOSU9fQUNDRVNTPWJvYXRib2F0Ck1JTklPX1NFQ1JFVD1ib2F0Ym9hdA==
+
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      serviceAccountName: my-service-account
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: my-app
+          image: "core.harbor.domain/library/goappboat"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: my-env-vars
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: env-file
+              mountPath: /app/.env
+              subPath: .env
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+      volumes:
+        - name: env-file
+          secret:
+            secretName: my-env-vars
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock

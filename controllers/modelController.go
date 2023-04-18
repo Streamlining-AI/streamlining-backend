@@ -75,6 +75,7 @@ func HandlerUpload() gin.HandlerFunc {
 			URL:               model.GithubURL,
 			RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 		})
+		fmt.Println("Git Clone Succesfull")
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Cannot Get data"})
 			return
@@ -184,7 +185,7 @@ func HandlerDeployDocker(dir string, modelName string, modelID primitive.ObjectI
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
 	DockerImageID := helper.PushToDocker(dir, modelName, modelVersion)
-
+	fmt.Println("Return from registry" + DockerImageID)
 	var modelImage models.ModelImage
 	modelImage.ImageID = primitive.NewObjectID()
 	modelImage.DockerImageID = DockerImageID
@@ -528,6 +529,7 @@ func HandlerPredict() gin.HandlerFunc {
 		if err != nil {
 			log.Fatal(err)
 		}
+		// c.JSON(200, gin.H{"output": "/files/" + predictResp.Output.(string)})
 		c.JSON(200, gin.H{"output": "/files/" + fileName})
 	}
 }

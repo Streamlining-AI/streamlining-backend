@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 func PushToDocker(folderName string, name string, modelVersion string) string {
@@ -37,9 +36,9 @@ func PushToDocker(folderName string, name string, modelVersion string) string {
 
 	e = filepath.Walk(folderName, func(path string, info os.FileInfo, err error) error {
 		if err == nil && libRegEx.MatchString(info.Name()) {
-			println(info.Name(), path)
+			fmt.Println("Info Path "+info.Name(), path)
 			// pathModel = path
-			println(folderName)
+			fmt.Println("Folder Name " + folderName)
 		}
 		return nil
 	})
@@ -47,42 +46,46 @@ func PushToDocker(folderName string, name string, modelVersion string) string {
 		log.Fatal(e)
 	}
 
-	commandCog := "cog"
-	task := "build"
-	cogTag := "-t"
-
 	pathDir, err := os.Getwd()
 	if err != nil {
 		log.Println(err)
 	}
 	fmt.Println(pathDir)
 	name = strings.ToLower(name)
-	cmd := exec.Command(commandCog, task, cogTag, name)
-	cmd.Dir = folderName
-	if err := cmd.Run(); err != nil {
-		fmt.Println("could not run command: ", err)
-	}
-
-	commandDocker := "docker"
-	images := "images"
-	// docker images name
-	cmd1, err := exec.Command(commandDocker, images, name).Output()
-	if err != nil {
-		log.Fatal(err)
-	}
-	dockerOutput := string(cmd1)
-	dockerDescript := strings.Split(dockerOutput, "\n")
-	dockerDetail := strings.Fields(dockerDescript[1])
-	dockerImageID := dockerDetail[2]
-	dockerName := dockerDetail[0]
-	fmt.Println(dockerImageID)
 
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		panic(err)
 	}
-	defer cli.Close()
+
+	fmt.Println("Start Running COG")
+	cmd := exec.Command("cog", "build", "-t", name)
+	cmd.Dir = pathDir + "/" + folderName
+	// if err := cmd.Run(); err != nil {
+	// 	fmt.Println("could not run command: ", err)
+	// }
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Println("Error running command COG:", err)
+	} else {
+		fmt.Println("Command output:", string(output))
+	}
+
+	fmt.Println("Get Image Name")
+	// docker images name
+	cmd1, err := exec.Command("docker", "images", name).Output()
+	// cmd1, err := exec.Command("ls").Output()
+	if err != nil {
+		fmt.Println(err)
+	}
+	dockerOutput := string(cmd1)
+	fmt.Println(dockerOutput)
+	dockerDescript := strings.Split(dockerOutput, "\n")
+	dockerDetail := strings.Fields(dockerDescript[1])
+	dockerImageID := dockerDetail[2]
+	dockerName := dockerDetail[0]
+	fmt.Println(dockerImageID)
 
 	authConfig := types.AuthConfig{
 		Username:      "admin",
@@ -122,6 +125,7 @@ func PushToDocker(folderName string, name string, modelVersion string) string {
 			panic(errorMessage.Error)
 		}
 	}
+	defer cli.Close()
 	return imageTag
 }
 
@@ -464,45 +468,14 @@ func DeleteDeploymentAndService(deploymentName string, serviceName string) error
 func int32Ptr(i int32) *int32 { return &i }
 
 func GetServiceURL(name string) (string, string, error) {
-	// Use the current context in kubeconfig
-	GetPredictUrlCmd, err := exec.Command("minikube", "service", "--url", name+"-service").Output()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(GetPredictUrlCmd)
-	PodURL := strings.Trim(string(GetPredictUrlCmd), "\n")
-
-	kubeConfig, err := GetKubeConfig()
-	if err != nil {
-		return "", "", err
-	}
-
-	// Create a Kubernetes client
-	clientset, err := kubernetes.NewForConfig(kubeConfig)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Get the service
-	service, err := clientset.CoreV1().Services("default").Get(context.TODO(), name+"-service", metav1.GetOptions{})
-	if err != nil {
-		return "", "", err
-	}
-
-	// Get the service URL
-	port := service.Spec.Ports[0].Port
-	url := fmt.Sprintf("http://%s:%d", service.Spec.ClusterIP, port)
-
-	fmt.Print(url)
-	return PodURL, PodURL + "/predictions", nil
+	return "http://" + name + "-service:5000", "http://" + name + "-service:5000" + "/predictions", nil
 }
 
 func GetKubeConfig() (*rest.Config, error) {
-	// Use the current context in kubeconfig
-	homeDir := os.Getenv("HOME")
-	config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+
+	config, err := rest.InClusterConfig()
 	if err != nil {
-		return nil, err
+		panic(err.Error())
 	}
 	return config, nil
 }
