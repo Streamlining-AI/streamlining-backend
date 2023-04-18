@@ -77,6 +77,25 @@ func UploadFileHandler() gin.HandlerFunc {
 			return
 		}
 
+		// Check if the bucket already exists
+		exists, err := minioClient.BucketExists(context.Background(), "mybucket")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		// If the bucket doesn't exist, create it
+		if !exists {
+			err = minioClient.MakeBucket(context.Background(), "mybucket", minio.MakeBucketOptions{})
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			fmt.Printf("Bucket '%s' created successfully.\n", "mybucket")
+		} else {
+			fmt.Printf("Bucket '%s' already exists.\n", "mybucket")
+		}
+
 		newFileName := fileName + fileEndings[0]
 
 		_, err = minioClient.PutObject(context.Background(), "mybucket", newFileName, buffer, fileSize, minio.PutObjectOptions{

@@ -27,7 +27,7 @@ spec:
         - name: regcred
       containers:
         - name: my-app
-          image: "core.harbor.domain/library/goappboat"
+          image: "core.harbor.domain/library/boat5"
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:

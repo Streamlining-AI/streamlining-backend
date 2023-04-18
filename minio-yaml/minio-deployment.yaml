@@ -20,6 +20,13 @@ spec:
         - name: minio
           image: quay.io/minio/minio:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: MINIO_ACCESS_KEY
+              value: boatboat
+            - name: MINIO_SECRET_KEY
+              value: boatboat
+            - name: MINIO_BUCKET
+              value: mybucket
           livenessProbe:
             httpGet:
               path: /minio/health/live
