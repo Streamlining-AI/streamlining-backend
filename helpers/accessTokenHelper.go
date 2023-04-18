@@ -87,10 +87,11 @@ func GetGithubAccessToken(code string) string {
 type TokenDetail struct {
 	AccessToken string
 	Uid         string
+	Username    string
 	jwt.StandardClaims
 }
 
-func EncodeToken(accessToken string, uid string) (signedToken string, err error) {
+func EncodeToken(accessToken string, uid string, username string) (signedToken string, err error) {
 	SECRET_KEY, exists := os.LookupEnv("SECRET_KEY")
 	if !exists {
 		log.Fatal("SECRET_KEY not defined in .env file")
@@ -99,6 +100,7 @@ func EncodeToken(accessToken string, uid string) (signedToken string, err error)
 	claims := &TokenDetail{
 		AccessToken: accessToken,
 		Uid:         uid,
+		Username:    username,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: time.Now().Local().Add(time.Hour * time.Duration(24)).Unix(),
 		},
@@ -129,20 +131,17 @@ func DecodeToken(accessToken string) (claims *TokenDetail, msg string) {
 	)
 	if err != nil {
 		msg = err.Error()
-		return
+
 	}
 
 	claims, ok := token.Claims.(*TokenDetail)
 	if !ok {
 		msg = fmt.Sprintf("the token is invalid")
-		msg = err.Error()
-		return
 	}
 
 	if claims.ExpiresAt < time.Now().Local().Unix() {
 		msg = fmt.Sprintf("token is expired")
-		msg = err.Error()
-		return
+
 	}
 	return claims, msg
 }

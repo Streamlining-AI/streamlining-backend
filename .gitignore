@@ -1,2 +1,9 @@
-.env
 go.sum
+.env
+
+repos/
+Service.yaml
+
+data/images/
+
+Deployment.yaml

@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"strings"
 
@@ -45,7 +45,7 @@ func VerifyPassword(userPassword string, providedPassword string) (bool, string)
 	msg := ""
 
 	if err != nil {
-		msg = fmt.Sprintf("login or passowrd is incorrect")
+		msg = "login or passowrd is incorrect"
 		check = false
 	}
 
@@ -86,18 +86,18 @@ func Regsiter() gin.HandlerFunc {
 			return
 		}
 
-		user.Created_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		user.Updated_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		user.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		user.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		user.ID = primitive.NewObjectID()
 		user.User_id = user.ID.Hex()
-		token, refreshToken, err := helper.GenerateAllTokens(*user.Email, user.User_id)
+		token, refreshToken, _ := helper.GenerateAllTokens(*user.Email, user.User_id)
 		user.Token = &token
 		user.Refresh_token = &refreshToken
 
 		resultInsertionNumber, insertErr := userCollection.InsertOne(ctx, user)
 		defer cancel()
 		if insertErr != nil {
-			msg := fmt.Sprintf("User item was not created")
+			msg := "User item was not created"
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
 		}
@@ -128,7 +128,7 @@ func Login() gin.HandlerFunc {
 
 		passwordIsValid, msg := VerifyPassword(*user.Password, *foundUser.Password)
 		defer cancel()
-		if passwordIsValid != true {
+		if !passwordIsValid {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
 		}
@@ -136,7 +136,9 @@ func Login() gin.HandlerFunc {
 		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.Email, foundUser.User_id)
 
 		helper.UpdateAllTokens(token, refreshToken, foundUser.User_id)
-		c.SetCookie("token", token, 3600, "/", "127.0.0.1", false, true)
+		c.SetSameSite(http.SameSiteNoneMode)
+		c.SetCookie("token", token, 3600, "/", "localhost:3000", true, true)
+
 		c.JSON(http.StatusOK, foundUser)
 
 	}
@@ -144,14 +146,14 @@ func Login() gin.HandlerFunc {
 
 func Logout() gin.HandlerFunc {
 	return func(c *gin.Context) {
-
-		c.SetCookie("token", "", -1, "/", "127.0.0.1", false, true)
+		c.SetSameSite(http.SameSiteNoneMode)
+		c.SetCookie("token", "", -1, "/", "localhost:3000", true, true)
 		c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
 
 	}
 }
 
-func RegisterGithub(userName string, userId string) error {
+func RegisterGithub(userName string, userId string) (string, error) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
 	var user models.UserGithub
@@ -159,21 +161,21 @@ func RegisterGithub(userName string, userId string) error {
 	user.ID = primitive.NewObjectID()
 	user.User_id = userId
 	user.Username = userName
-	user.Created_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-	user.Updated_at, err = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	user.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+	user.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 
 	defer cancel()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	_, insertErr := userCollectionGithub.InsertOne(ctx, user)
 	defer cancel()
 	if insertErr != nil {
-		return insertErr
+		return "", insertErr
 	}
 
-	return nil
+	return user.ID.String(), nil
 }
 
 func GithubLoginHandler() gin.HandlerFunc {
@@ -184,7 +186,7 @@ func GithubLoginHandler() gin.HandlerFunc {
 		redirectURL := fmt.Sprintf(
 			"https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&scope=repo,user",
 			githubClientID,
-			"http://localhost:3000/login/github/callback",
+			"https://localhost:3000/login/github/callback",
 		)
 		c.JSON(http.StatusOK, gin.H{"redirectURL": redirectURL})
 	}
@@ -210,38 +212,97 @@ func GithubCallbackHandler() gin.HandlerFunc {
 		if parserr != nil {
 			log.Panic("JSON parse error")
 		}
-		userData := strings.Split(githubData, ",")
-		userName := strings.Split(userData[0], ":")
-		userName1 := strings.Trim(userName[1], `"`)
 
-		userId := strings.Split(userData[1], ":")
-		userId1 := userId[0]
+		if strings.Contains(string(prettyJSON.String()), `"message": "Bad credentials"`) {
+			println("Bad Credentials")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Bad Credentials"})
+			return
+		}
+		var data map[string]interface{}
 
-		count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": userName1})
-
-		defer cancel()
+		// Unmarshal the JSON string into the data map
+		err := json.Unmarshal([]byte(githubData), &data)
 		if err != nil {
-			msg := fmt.Sprintf("error occured while checking for the username")
-			c.JSON(http.StatusBadRequest, msg)
+			fmt.Println(err)
 			return
 		}
 
-		if count == 0 {
-			err = RegisterGithub(userName1, userId1)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
-				return
-			}
-		}
+		username := data["login"]
+		githubID := data["id"]
+		githubID = int(githubID.(float64))
 
-		token, err := helper.EncodeToken(githubAccessToken, userId1)
+		strUsername := fmt.Sprintf("%v", username)
+		strGithubID := fmt.Sprintf("%d", githubID)
+
+		token, err := helper.EncodeToken(githubAccessToken, strGithubID, strUsername)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 			return
 		}
-		// claims, _ := helper.DecodeToken(token)
-		c.SetCookie("token", token, 3600, "/", "127.0.0.1", false, true)
-		c.JSON(http.StatusOK, gin.H{"token": token})
+		count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": strUsername})
+
+		defer cancel()
+		if err != nil {
+			msg := "error occured while checking for the username"
+			c.JSON(http.StatusBadRequest, msg)
+			return
+		}
+		var userID string
+		var user models.UserGithub
+		if count == 0 {
+
+			userID, err = RegisterGithub(strUsername, strGithubID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				return
+			}
+
+		} else {
+			err := userCollectionGithub.FindOne(ctx, bson.M{"username": strUsername}).Decode(&user)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				return
+			}
+			userID = user.ID.String()
+		}
+
+		// ====================================================================================
+		/*
+			userData := strings.Split(githubData, ",")
+			userName := strings.Split(userData[0], ":")
+			userName1 := strings.Trim(userName[1], `"`)
+
+			userId := strings.Split(userData[1], ":")
+			userId1 := userId[1]
+
+			count, err := userCollectionGithub.CountDocuments(ctx, bson.M{"username": userName1})
+
+			defer cancel()
+			if err != nil {
+				msg := "error occured while checking for the username"
+				c.JSON(http.StatusBadRequest, msg)
+				return
+			}
+
+			if count == 0 {
+
+				err = RegisterGithub(userName1, userId1)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+					return
+				}
+
+			}
+			token, err := helper.EncodeToken(githubAccessToken, userId1)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				return
+			}
+		*/
+		// =================================================================
+		c.SetSameSite(http.SameSiteNoneMode)
+		c.SetCookie("token", token, 1000*60*60*24, "/", "localhost:3000", true, true)
+		c.JSON(http.StatusOK, gin.H{"token": token, "ID": userID, "username": strUsername})
 	}
 }
 
@@ -268,7 +329,7 @@ func GetGithubData(accessToken string) string {
 	}
 
 	// Read the response as a byte slice
-	respbody, _ := ioutil.ReadAll(resp.Body)
+	respbody, _ := io.ReadAll(resp.Body)
 
 	// Convert byte slice to string and return
 	// util.GitClone(accessToken)
