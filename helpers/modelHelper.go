@@ -472,7 +472,11 @@ func GetServiceURL(name string) (string, string, error) {
 }
 
 func GetKubeConfig() (*rest.Config, error) {
-
+	// homeDir := os.Getenv("HOME")
+	// config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	// if err != nil {
+	// 	return nil, err
+	// }
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		panic(err.Error())

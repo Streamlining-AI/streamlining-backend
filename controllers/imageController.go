@@ -96,7 +96,7 @@ func UploadFileHandler() gin.HandlerFunc {
 			fmt.Printf("Bucket '%s' already exists.\n", "mybucket")
 		}
 
-		newFileName := fileName + fileEndings[0]
+		newFileName := fileName + fileEndings[1]
 
 		_, err = minioClient.PutObject(context.Background(), "mybucket", newFileName, buffer, fileSize, minio.PutObjectOptions{
 			ContentType: detectedFileType,
