@@ -48,6 +48,7 @@ type ModelDataTransfer struct {
 	GithubCode    string `json:"github_code"`
 	Model_Version string `json:"model_version"`
 	Banner        string `json:"banner_url"`
+	Registry      string `json:"registry"`
 }
 
 type ModelData struct {
@@ -63,6 +64,7 @@ type ModelData struct {
 	UserID             primitive.ObjectID `bson:"user_id" json:"user_id"`
 	OutputType         string             `bson:"output_type" json:"output_type"`
 	Banner             string             `bson:"banner_url" json:"banner_url"`
+	Registry           string             `bson:"registry" json:"registry"`
 }
 
 type ModelImage struct {

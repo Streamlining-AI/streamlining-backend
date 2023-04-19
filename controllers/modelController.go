@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"io"
 	"log"
+	"net/http"
 	gohttp "net/http"
 	"os"
 	"sort"
@@ -20,6 +21,7 @@ import (
 	"github.com/Streamlining-AI/streamlining-backend/models"
 	"github.com/gin-gonic/gin"
 	"github.com/go-git/go-git/v5"
+	"github.com/minio/minio-go/v7"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -54,7 +56,7 @@ func HandlerUpload() gin.HandlerFunc {
 		model.Type = reqModel.Type
 		model.IsVisible = reqModel.IsVisible
 		model.GithubURL = reqModel.GithubURL
-
+		model.Registry = reqModel.Registry
 		model.PredictRecordCount = 0
 		model.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		model.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
@@ -93,7 +95,7 @@ func HandlerUpload() gin.HandlerFunc {
 		if err != nil {
 			fmt.Print(err)
 		}
-		ImageID, DockerURL, err := HandlerDeployDocker(dir, model.Name, model.ModelID, reqModel.Model_Version)
+		ImageID, DockerURL, err := HandlerDeployDocker(dir, model.Registry, model.ModelID, reqModel.Model_Version)
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Error during handling docker image"})
 			return
@@ -110,8 +112,8 @@ func HandlerUpload() gin.HandlerFunc {
 			log.Fatal(err)
 		}
 		modelVersion := strings.ReplaceAll(reqModel.Model_Version, ".", "-")
-		serviceName := strings.ToLower(reqModel.Name) + modelVersion
-		err = HandlerDeployKube(DockerURL, ImageID, strings.ToLower(reqModel.Name), serviceName)
+		serviceName := strings.ToLower(model.Name) + modelVersion
+		err = HandlerDeployKube(model.Registry, ImageID, strings.ToLower(model.Name), serviceName)
 
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Error during handling kubernetes "})
@@ -181,10 +183,10 @@ func CreateInputDetail(inputConfig []models.Input) []models.ModelInputDetail {
 	return modelInputDetailS
 }
 
-func HandlerDeployDocker(dir string, modelName string, modelID primitive.ObjectID, modelVersion string) (primitive.ObjectID, string, error) {
+func HandlerDeployDocker(dir string, registry string, modelID primitive.ObjectID, modelVersion string) (primitive.ObjectID, string, error) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
-	DockerImageID := helper.PushToDocker(dir, modelName, modelVersion)
+	DockerImageID := registry
 	fmt.Println("Return from registry" + DockerImageID)
 	var modelImage models.ModelImage
 	modelImage.ImageID = primitive.NewObjectID()
@@ -503,19 +505,47 @@ func HandlerPredict() gin.HandlerFunc {
 		}
 		// Now you can use the decoded image object as needed
 		// For example, you can encode it as a PNG and write it to a file
-		uploadPath, err := helper.CreateAndGetDir("data/images/")
-		if err != nil {
-			log.Fatal(err)
-		}
+
 		var fileName = RandToken(12) + ".png"
-		out, err := os.Create(uploadPath + "/" + fileName)
+
+		buf := new(bytes.Buffer)
+		err = png.Encode(buf, img)
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer out.Close()
-		err = png.Encode(out, img)
+
+		const maxUploadSize = 2 * 1024 * 1024 // 2 mb
+
+		var minioClient *minio.Client = database.MinioClient
+		// Upload the PNG image to the specified bucket and object
+		object := bytes.NewReader(buf.Bytes())
+		objectSize := int64(len(buf.Bytes()))
+
+		// Check if the bucket already exists
+		exists, err := minioClient.BucketExists(context.Background(), "mybucket")
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			return
+		}
+
+		// If the bucket doesn't exist, create it
+		if !exists {
+			err = minioClient.MakeBucket(context.Background(), "mybucket", minio.MakeBucketOptions{})
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			fmt.Printf("Bucket '%s' created successfully.\n", "mybucket")
+		} else {
+			fmt.Printf("Bucket '%s' already exists.\n", "mybucket")
+		}
+
+		_, err = minioClient.PutObject(context.Background(), "mybucket", fileName, object, objectSize, minio.PutObjectOptions{
+			ContentType: "image/png",
+		})
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 
 		var modelOutputData models.ModelOutputData
