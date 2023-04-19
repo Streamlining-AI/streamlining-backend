@@ -4,6 +4,7 @@ metadata:
   name: mongo-express
   labels:
     app: mongo-express
+  namespace: streaming
 spec:
   replicas: 1
   selector:
@@ -40,6 +41,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mongo-express-service
+  namespace: streaming
 spec:
   selector:
     app: mongo-express

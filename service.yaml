@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: myapp-service
+  namespace: streaming
 spec:
   type: LoadBalancer
   selector:

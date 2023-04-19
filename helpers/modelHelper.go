@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
-	"gopkg.in/yaml.v2"
 
 	v1d "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -28,7 +26,27 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+var Username string = "admin"
+var Password string = "Harbor12345"
+var Registry string = "core.harbor.domain"
+
 func PushToDocker(folderName string, name string, modelVersion string) string {
+
+	USERNAME, exists := os.LookupEnv("USERNAME")
+	if !exists {
+		log.Fatal("MONGODB_URL not defined in .env file")
+	}
+
+	PASSWORD, exists := os.LookupEnv("PASSWORD")
+	if !exists {
+		log.Fatal("MONGODB_URL not defined in .env file")
+	}
+
+	REGISTRY, exists := os.LookupEnv("REGISTRY")
+	if !exists {
+		log.Fatal("MONGODB_URL not defined in .env file")
+	}
+
 	libRegEx, e := regexp.Compile("cog.yaml")
 	if e != nil {
 		log.Fatal(e)
@@ -62,9 +80,7 @@ func PushToDocker(folderName string, name string, modelVersion string) string {
 	fmt.Println("Start Running COG")
 	cmd := exec.Command("cog", "build", "-t", name)
 	cmd.Dir = pathDir + "/" + folderName
-	// if err := cmd.Run(); err != nil {
-	// 	fmt.Println("could not run command: ", err)
-	// }
+
 	output, err := cmd.Output()
 	if err != nil {
 		fmt.Println("Error running command COG:", err)
@@ -88,9 +104,9 @@ func PushToDocker(folderName string, name string, modelVersion string) string {
 	fmt.Println(dockerImageID)
 
 	authConfig := types.AuthConfig{
-		Username:      "admin",
-		Password:      "Harbor12345",
-		ServerAddress: "core.harbor.domain",
+		Username:      USERNAME,
+		Password:      PASSWORD,
+		ServerAddress: REGISTRY,
 	}
 
 	encodedJSON, err := json.Marshal(authConfig)
@@ -98,7 +114,7 @@ func PushToDocker(folderName string, name string, modelVersion string) string {
 		panic(err)
 	}
 	authStr := base64.URLEncoding.EncodeToString(encodedJSON)
-	imageTag := "core.harbor.domain/library/" + dockerName + ":" + modelVersion
+	imageTag := REGISTRY + "/library/" + dockerName + ":" + modelVersion
 
 	err = cli.ImageTag(ctx, dockerImageID, imageTag)
 	fmt.Print(err)
@@ -129,204 +145,6 @@ func PushToDocker(folderName string, name string, modelVersion string) string {
 	return imageTag
 }
 
-func CreateDeploy1(URL string, Name string, ServiceName string) {
-	type MetadataStruct struct {
-		Name string `yaml:"name"`
-	}
-
-	type MatchLabelsStruct struct {
-		App string `yaml:"app"`
-	}
-
-	// ==============================================
-	type SelectorStruct struct {
-		MatchLabels MatchLabelsStruct `yaml:"matchLabels"`
-	}
-
-	type LabelsStruct struct {
-		App string `yaml:"app"`
-	}
-
-	type TemplateMetadataStruct struct {
-		Labels LabelsStruct `yaml:"labels"`
-	}
-
-	// ==============================================
-
-	type PortsStruct struct {
-		ContainerPort int `yaml:"containerPort"`
-	}
-
-	type ContainersStruct struct {
-		Name  string `yaml:"name"`
-		Image string `yaml:"image"`
-		Ports []PortsStruct
-	}
-
-	// ==============================================
-
-	type ImagePullSecretsStruct struct {
-		Name string `yaml:"name"`
-	}
-
-	type TemplateSpecStruct struct {
-		Containers       []ContainersStruct       `yaml:"containers"`
-		ImagePullSecrets []ImagePullSecretsStruct `yaml:"imagePullSecrets"`
-	}
-
-	type TemplateStruct struct {
-		Metadata TemplateMetadataStruct `yaml:"metadata"`
-		Spec     TemplateSpecStruct     `yaml:"spec"`
-	}
-
-	type SpecStruct struct {
-		Replicas int            `yaml:"replicas"`
-		Selector SelectorStruct `yaml:"selector"`
-		Template TemplateStruct `yaml:"template"`
-	}
-
-	type Deploy struct {
-		Kind       string         `yaml:"kind"`
-		ApiVersion string         `yaml:"apiVersion"`
-		Metadata   MetadataStruct `yaml:"metadata"`
-		Spec       SpecStruct     `yaml:"spec"`
-	}
-	DeployStruct := Deploy{
-		Kind:       "Deployment",
-		ApiVersion: "apps/v1",
-		Metadata: MetadataStruct{
-			Name: ServiceName + "-service",
-		},
-		Spec: SpecStruct{
-			Replicas: 1,
-			Selector: SelectorStruct{
-				MatchLabels: MatchLabelsStruct{
-					App: Name,
-				},
-			},
-			Template: TemplateStruct{
-				Metadata: TemplateMetadataStruct{
-					Labels: LabelsStruct{
-						App: Name,
-					},
-				},
-				Spec: TemplateSpecStruct{
-					Containers: []ContainersStruct{{
-						Name:  Name,
-						Image: URL,
-						Ports: []PortsStruct{{
-							ContainerPort: 5000,
-						}},
-					}},
-					ImagePullSecrets: []ImagePullSecretsStruct{
-						{
-							Name: "regcred",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	DeployYaml, err := yaml.Marshal(&DeployStruct)
-
-	if err != nil {
-		fmt.Printf("Error while Marshaling. %v", err)
-	}
-	err2 := ioutil.WriteFile("Deployment.yaml", DeployYaml, 0777)
-
-	if err2 != nil {
-
-		log.Fatal(err2)
-	}
-}
-
-func CreateService1(Name string, ServiceName string) {
-	type LabelsStruct struct {
-		App string `yaml:"app"`
-	}
-
-	type MetadataStruct struct {
-		Name   string       `yaml:"name"`
-		Labels LabelsStruct `yaml:"labels"`
-	}
-
-	type PortsStruct struct {
-		Port       int    `yaml:"port"`
-		TargetPort int    `yaml:"targetPort"`
-		Protocol   string `yaml:"protocol"`
-	}
-
-	type SelectorStruct struct {
-		App string `yaml:"app"`
-	}
-
-	type SpecStruct struct {
-		Type     string `yaml:"type"`
-		Ports    []PortsStruct
-		Selector SelectorStruct `yaml:"selector"`
-	}
-
-	type Service struct {
-		ApiVersion string         `yaml:"apiVersion"`
-		Kind       string         `yaml:"kind"`
-		Metadata   MetadataStruct `yaml:"metadata"`
-		Spec       SpecStruct     `yaml:"spec"`
-	}
-
-	ServiceStruct := Service{
-		ApiVersion: "v1",
-		Kind:       "Service",
-		Metadata: MetadataStruct{
-			Name: ServiceName + "-service",
-			Labels: LabelsStruct{
-				App: Name,
-			},
-		},
-		Spec: SpecStruct{
-			Type: "LoadBalancer",
-			Ports: []PortsStruct{
-				{
-					Port:       5000,
-					TargetPort: 5000,
-					Protocol:   "TCP",
-				},
-			},
-			Selector: SelectorStruct{
-				App: Name,
-			},
-		},
-	}
-
-	ServiceYaml, err := yaml.Marshal(&ServiceStruct)
-
-	if err != nil {
-		fmt.Printf("Error while Marshaling. %v", err)
-	}
-	err2 := ioutil.WriteFile("Service.yaml", ServiceYaml, 0777)
-
-	if err2 != nil {
-
-		log.Fatal(err2)
-	}
-}
-
-func DeployKube(Name string) (string, string) {
-	DeployToKubeCmd, err := exec.Command("kubectl", "apply", "-f", ".").Output()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(DeployToKubeCmd)
-
-	GetPredictUrlCmd, err := exec.Command("minikube", "service", "--url", Name).Output()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(GetPredictUrlCmd)
-	PodURL := strings.Trim(string(GetPredictUrlCmd), "\n")
-	return PodURL, PodURL + "/predictions"
-}
-
 func CreateService(name string, serviceName string) error {
 	// Use the current context in kubeconfig
 	config, err := GetKubeConfig()
@@ -343,7 +161,8 @@ func CreateService(name string, serviceName string) error {
 	// Create the Service object
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: serviceName + "-service",
+			Name:      serviceName + "-service",
+			Namespace: "streaming",
 			Labels: map[string]string{
 				"app": name,
 			},
@@ -364,7 +183,7 @@ func CreateService(name string, serviceName string) error {
 	}
 
 	// Create the Service
-	_, err = clientset.CoreV1().Services("default").Create(context.TODO(), service, metav1.CreateOptions{})
+	_, err = clientset.CoreV1().Services("streaming").Create(context.TODO(), service, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
@@ -388,7 +207,8 @@ func CreateDeployment(name, serviceName, imageURL string) error {
 	// Define the Deployment object
 	deployment := &v1d.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: serviceName + "-service",
+			Name:      serviceName + "-service",
+			Namespace: "streaming",
 			Labels: map[string]string{
 				"app": name,
 			},
@@ -429,7 +249,7 @@ func CreateDeployment(name, serviceName, imageURL string) error {
 	}
 
 	// Create the Deployment
-	_, err = clientset.AppsV1().Deployments("default").Create(context.TODO(), deployment, metav1.CreateOptions{})
+	_, err = clientset.AppsV1().Deployments("streaming").Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
@@ -451,13 +271,13 @@ func DeleteDeploymentAndService(deploymentName string, serviceName string) error
 	}
 
 	// Delete the Deployment
-	err = clientset.AppsV1().Deployments("default").Delete(context.TODO(), deploymentName, metav1.DeleteOptions{})
+	err = clientset.AppsV1().Deployments("streaming").Delete(context.TODO(), deploymentName, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 
 	// Delete the Service
-	err = clientset.CoreV1().Services("default").Delete(context.TODO(), serviceName, metav1.DeleteOptions{})
+	err = clientset.CoreV1().Services("streaming").Delete(context.TODO(), serviceName, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
@@ -472,7 +292,11 @@ func GetServiceURL(name string) (string, string, error) {
 }
 
 func GetKubeConfig() (*rest.Config, error) {
-
+	// homeDir := os.Getenv("HOME")
+	// config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+	// if err != nil {
+	// 	return nil, err
+	// }
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		panic(err.Error())
