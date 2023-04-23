@@ -156,7 +156,7 @@ func HandlerConfig(dir string, modelID primitive.ObjectID, dockerImageID string)
 		return err
 	}
 	// Update Output Detail to Model Collection
-	update := bson.D{{Key: "$set", Value: bson.D{{Key: "output_type", Value: payload.Output.Type}}}}
+	update := bson.D{{Key: "$set", Value: bson.D{{Key: "output_type", Value: payload.Output.Name}}}}
 	_, err = modelCollection.UpdateOne(ctx, bson.M{"model_id": modelID}, update)
 
 	if err != nil {
@@ -517,17 +517,26 @@ func HandlerPredict() gin.HandlerFunc {
 		// Response body converted to stringified JSON
 		respbody, _ := io.ReadAll(respPredict.Body)
 
-		// Represents the response received from Github
 		type PredictOutput struct {
 			Status string      `json:"status"`
 			Output interface{} `json:"output"`
 		}
 
-		// Convert stringified JSON to a struct object of type githubAccessTokenResponse
-		var predictResp PredictOutput
-		json.Unmarshal(respbody, &predictResp)
+		type PredictOutputWithAttribute struct {
+			Status string                 `json:"status"`
+			Output map[string]interface{} `json:"output"`
+		}
 
-		imgBase64 := strings.TrimPrefix(predictResp.Output.(string), "data:image/png;base64,")
+		var predictResp PredictOutput
+		var predictRespAtt PredictOutputWithAttribute
+		var imgBase64 string
+		if model.OutputType == "no" {
+			json.Unmarshal(respbody, &predictResp)
+			imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/png;base64,")
+		} else {
+			json.Unmarshal(respbody, &predictRespAtt)
+			imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,")
+		}
 		imgBytes, err := base64.StdEncoding.DecodeString(imgBase64)
 		if err != nil {
 			log.Fatal(err)
@@ -590,7 +599,188 @@ func HandlerPredict() gin.HandlerFunc {
 		if err != nil {
 			log.Fatal(err)
 		}
-		// c.JSON(200, gin.H{"output": "/files/" + predictResp.Output.(string)})
+		// c.JSON(200, gin.H{"output": predictResp})
+		c.JSON(200, gin.H{"output": "/files/" + fileName})
+	}
+}
+
+func HandlerPredictStream() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// var uploadPath = os.TempDir()
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		var inputData models.ModelInputDataTransfer
+
+		defer cancel()
+		if err := c.BindJSON(&inputData); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		modelID, _ := primitive.ObjectIDFromHex(inputData.ModelID)
+		var model models.ModelData
+		err := modelCollection.FindOne(ctx, bson.M{"model_id": modelID}).Decode(&model)
+		defer cancel()
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		var modelInput models.ModelInput
+
+		err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": inputData.DockerImageID}).Decode(&modelInput)
+		defer cancel()
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		predictBody := map[string]map[string]interface{}{}
+		predictBody["input"] = map[string]interface{}{}
+		for i := 0; i < len(inputData.DataInputs); i++ {
+			inputDetailID, _ := primitive.ObjectIDFromHex(inputData.DataInputs[i].ModelInputDetailID)
+			for j := 0; j < len(modelInput.InputDetail); j++ {
+				if inputDetailID == modelInput.InputDetail[j].ModelInputDetailID {
+					if inputData.DataInputs[i].Type != modelInput.InputDetail[j].Type {
+						c.JSON(400, gin.H{"error": "Wrong Input Type"})
+						return
+					}
+					// if inputData.DataInputs[i].Type == "image" {
+					// 	str := fmt.Sprintf("%v", inputData.DataInputs[i].Data)
+					// 	var x interface{} = uploadPath + "/" + str
+					// 	// interface{uploadPath + inputData.DataInputs[i].Data}
+					// 	inputData.DataInputs[i].Data = x
+					// 	str = fmt.Sprintf("%v", inputData.DataInputs[i].Data)
+
+					// }
+					predictBody["input"][modelInput.InputDetail[j].Name] = inputData.DataInputs[i].Data
+					break
+				}
+			}
+		}
+
+		var modelImage models.ModelImage
+		err = modelCollectionImage.FindOne(ctx, bson.M{"docker_image_id": inputData.DockerImageID}).Decode(&modelImage)
+		defer cancel()
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		var modelPod models.ModelPod
+		err = modelCollectionPod.FindOne(ctx, bson.M{"image_id": modelImage.ImageID}).Decode(&modelPod)
+		defer cancel()
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		var modelInputData models.ModelInputData
+		modelInputData.DockerImageID = inputData.DockerImageID
+		modelInputData.DataInputs = inputData.DataInputs
+
+		defer cancel()
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		update := bson.D{{Key: "$set", Value: bson.D{{Key: "predict_record_count", Value: model.PredictRecordCount + 1}}}}
+		_, err = modelCollection.UpdateOne(ctx, bson.M{"model_id": modelID}, update)
+		if err != nil {
+			fmt.Println(err)
+		}
+		requestJSON, _ := json.Marshal(predictBody)
+		req, reqerr := gohttp.NewRequest(
+			"POST",
+			modelPod.PredictURL,
+			bytes.NewBuffer(requestJSON),
+		)
+
+		if reqerr != nil {
+			log.Panic("Request creation failed")
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+
+		// Get the response
+		respPredict, resperr := gohttp.DefaultClient.Do(req)
+		if resperr != nil {
+			log.Panic("Request failed")
+		}
+
+		// Response body converted to stringified JSON
+		respbody, _ := io.ReadAll(respPredict.Body)
+
+		// Represents the response received from Github
+		type PredictOutput struct {
+			Status string      `json:"status"`
+			Output interface{} `json:"output"`
+		}
+
+		type PredictOutputWithAttribute struct {
+			Status string                 `json:"status"`
+			Output map[string]interface{} `json:"output"`
+		}
+
+		var predictResp PredictOutput
+		var predictRespAtt PredictOutputWithAttribute
+		var imgBase64 string
+		if model.OutputType == "no" {
+			json.Unmarshal(respbody, &predictResp)
+			imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/png;base64,")
+		} else {
+			json.Unmarshal(respbody, &predictRespAtt)
+			imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,")
+		}
+
+		imgBytes, err := base64.StdEncoding.DecodeString(imgBase64)
+		if err != nil {
+			log.Fatal(err)
+		}
+		img, err := png.Decode(bytes.NewReader(imgBytes))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var fileName = RandToken(12) + ".png"
+
+		buf := new(bytes.Buffer)
+		err = png.Encode(buf, img)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var minioClient *minio.Client = database.MinioClient
+		// Upload the PNG image to the specified bucket and object
+		object := bytes.NewReader(buf.Bytes())
+		objectSize := int64(len(buf.Bytes()))
+
+		// Check if the bucket already exists
+		exists, err := minioClient.BucketExists(context.Background(), "mybucket")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		// If the bucket doesn't exist, create it
+		if !exists {
+			err = minioClient.MakeBucket(context.Background(), "mybucket", minio.MakeBucketOptions{})
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			fmt.Printf("Bucket '%s' created successfully.\n", "mybucket")
+		} else {
+			fmt.Printf("Bucket '%s' already exists.\n", "mybucket")
+		}
+
+		_, err = minioClient.PutObject(context.Background(), "mybucket", fileName, object, objectSize, minio.PutObjectOptions{
+			ContentType: "image/png",
+		})
+		if err != nil {
+			c.AbortWithStatusJSON(gohttp.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
 		c.JSON(200, gin.H{"output": "/files/" + fileName})
 	}
 }
@@ -649,6 +839,7 @@ func HandlerUpdateModel() gin.HandlerFunc {
 		var model models.ModelData
 		model.ModelID, _ = primitive.ObjectIDFromHex(reqModel.ModelID)
 		model.GithubURL = reqModel.GithubURL
+		model.Registry = reqModel.Registry
 		model.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		update := bson.D{{Key: "$set", Value: bson.D{{Key: "updated_at", Value: model.UpdatedAt}}}}
 		_, err = modelCollection.UpdateByID(ctx, bson.M{"model_id": model.ModelID}, update)
@@ -673,8 +864,7 @@ func HandlerUpdateModel() gin.HandlerFunc {
 			c.JSON(500, gin.H{"message": "Cannot Get data"})
 			return
 		}
-
-		ImageID, DockerURL, err := HandlerDeployDocker(dir, reqModel.Name, model.ModelID, reqModel.Model_Version)
+		ImageID, DockerURL, err := HandlerDeployDocker(dir, model.Registry, model.ModelID, reqModel.Model_Version)
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Error during handling docker image"})
 			return
@@ -691,8 +881,8 @@ func HandlerUpdateModel() gin.HandlerFunc {
 			log.Fatal(err)
 		}
 		modelVersion := strings.ReplaceAll(reqModel.Model_Version, ".", "-")
-		serviceName := strings.ToLower(reqModel.Name) + modelVersion
-		err = HandlerDeployKube(DockerURL, ImageID, strings.ToLower(reqModel.Name), serviceName)
+		serviceName := strings.ToLower(model.Name) + modelVersion
+		err = HandlerDeployKube(model.Registry, ImageID, strings.ToLower(model.Name), serviceName)
 
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Error during handling kubernetes "})

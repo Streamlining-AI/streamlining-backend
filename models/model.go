@@ -36,6 +36,7 @@ type ModelUpdateTransfer struct {
 	GithubURL     string `json:"github_url"`
 	GithubCode    string `json:"github_code"`
 	Model_Version string `json:"model_version"`
+	Registry      string `json:"registry"`
 }
 
 type ModelDataTransfer struct {

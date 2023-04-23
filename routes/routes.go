@@ -18,6 +18,7 @@ func ModelRoutes(incomingRoutes *gin.Engine) {
 	incomingRoutes.GET("/model/input", controller.GetModelInputByDockerImageID())
 	incomingRoutes.GET("/model/", controller.GetAllModel())
 	incomingRoutes.POST("/predict/", controller.HandlerPredict())
+	incomingRoutes.POST("/stream/", controller.HandlerPredictStream())
 	incomingRoutes.GET("/model/output/:model_id", controller.GetAllOutputHistory())
 	incomingRoutes.DELETE("/model/:model_id", controller.HandlerDeleteModel())
 	incomingRoutes.POST("/model/", controller.HandlerUpload())

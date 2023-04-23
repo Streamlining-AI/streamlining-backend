@@ -207,6 +207,7 @@ func CreateDeployment(name, serviceName, imageURL string) error {
 					},
 				},
 				Spec: v1.PodSpec{
+					NodeName: "prism-2",
 					Containers: []v1.Container{
 						{
 							Name:  name,
@@ -218,13 +219,13 @@ func CreateDeployment(name, serviceName, imageURL string) error {
 							},
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									"nvidia.com/gpu": *resource.NewQuantity(1, resource.DecimalSI),
+									"nvidia.com/gpu": *resource.NewQuantity(2, resource.DecimalSI),
 								},
 							},
 							Env: []v1.EnvVar{
 								{
 									Name:  "NVIDIA_VISIBLE_DEVICES",
-									Value: "none",
+									Value: "all",
 								},
 							},
 						},
