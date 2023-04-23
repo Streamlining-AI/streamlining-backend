@@ -20,9 +20,10 @@ spec:
       labels:
         app: my-app
     spec:
+      serviceAccountName: knavapol
       containers:
         - name: my-app
-          image: "arbruzaz/streamlining:backincluster"
+          image: arbruzaz/streamlining:final1
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:

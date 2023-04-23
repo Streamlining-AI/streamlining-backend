@@ -9,7 +9,6 @@ import (
 	"image/png"
 	"io"
 	"log"
-	"net/http"
 	gohttp "net/http"
 	"os"
 	"sort"
@@ -221,7 +220,6 @@ func HandlerDeployKube(DockerURL string, ImageID primitive.ObjectID, modelName s
 
 	PodURL, PredictURL, _ := helper.GetServiceURL(serviceName)
 	fmt.Println("Get URL successfully.")
-	// PodURL, PredictURL := helper.DeployKube(serviceName)
 
 	var modelPod models.ModelPod
 	modelPod.PodID = primitive.NewObjectID()
@@ -244,7 +242,42 @@ func GetAllModel() gin.HandlerFunc {
 		var foundModels []models.ModelData
 		findOptions := options.Find()
 
-		cur, err := modelCollection.Find(context.TODO(), bson.D{{}}, findOptions)
+		cur, err := modelCollection.Find(context.TODO(), bson.M{"is_visible": true}, findOptions)
+		if err != nil {
+			println(err)
+			return
+		}
+
+		for cur.Next(context.TODO()) {
+			//Create a value into which the single document can be decoded
+			var elem models.ModelData
+			err := cur.Decode(&elem)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			foundModels = append(foundModels, elem)
+		}
+		if err := cur.Err(); err != nil {
+			log.Fatal(err)
+		}
+
+		//Close the cursor once finished
+		cur.Close(context.TODO())
+
+		fmt.Printf("Found multiple documents: %+v\n", foundModels)
+		c.JSON(200, foundModels)
+	}
+}
+
+func GetAllOwnerModel() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+		var foundModels []models.ModelData
+		id := c.Param("userid")
+		findOptions := options.Find()
+		userID, _ := primitive.ObjectIDFromHex(id)
+		cur, err := modelCollection.Find(context.TODO(), bson.M{"user_id": userID}, findOptions)
 		if err != nil {
 			println(err)
 			return
@@ -514,8 +547,6 @@ func HandlerPredict() gin.HandlerFunc {
 			log.Fatal(err)
 		}
 
-		const maxUploadSize = 2 * 1024 * 1024 // 2 mb
-
 		var minioClient *minio.Client = database.MinioClient
 		// Upload the PNG image to the specified bucket and object
 		object := bytes.NewReader(buf.Bytes())
@@ -544,7 +575,7 @@ func HandlerPredict() gin.HandlerFunc {
 			ContentType: "image/png",
 		})
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.AbortWithStatusJSON(gohttp.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
