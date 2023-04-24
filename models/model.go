@@ -97,6 +97,7 @@ type ModelInput struct {
 	ModelID       primitive.ObjectID `bson:"model_id" json:"model_id"`
 	DockerImageID string             `bson:"docker_image_id" json:"docker_image_id"`
 	InputDetail   []ModelInputDetail `bson:"input_detail" json:"input_detail"`
+	Version       string             `bson:"version" json:"version"`
 }
 
 type ModelInputDetail struct {
@@ -113,12 +114,14 @@ type ModelOutputData struct {
 	Output         string             `bson:"output" json:"output"`
 	CreatedAt      time.Time          `bson:"created_at" json:"created_at"`
 	ModelInputData ModelInputData     `bson:"model_input_data" json:"model_input_data"`
-	ModelID        primitive.ObjectID `bson:"model_id" bson:"model_id"`
+	ModelID        primitive.ObjectID `bson:"model_id" json:"model_id"`
+	Version        string             `bson:"version" json:"version"`
 }
 
 type ModelInputData struct {
 	DataInputs    []DataInput `bson:"data_inputs" json:"data_inputs"`
 	DockerImageID string      `bson:"docker_image_id" json:"docker_image_id"`
+	Version       string      `bson:"version" json:"version"`
 }
 
 type ModelConfig struct {
@@ -158,6 +161,7 @@ type ModelInputDataTransfer struct {
 	DataInputs    []DataInput `bson:"data_inputs" json:"data_inputs"`
 	ModelID       string      `bson:"model_id" json:"model_id"`
 	DockerImageID string      `bson:"docker_image_id" json:"docker_image_id"`
+	Version       string      `bson:"version" json:"version"`
 }
 
 type ModelReportRequest struct {
@@ -176,6 +180,7 @@ type ModelTransfer struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	OutputType         string             `json:"output_type"`
 	DockerImageID      []string           `json:"docker_image_id"`
+	Version            []string           `json:"version"`
 	InputDetail        []ModelInputDetail `json:"input_detail"`
 }
 

@@ -258,13 +258,13 @@ func DeleteDeploymentAndService(deploymentName string, serviceName string) error
 	}
 
 	// Delete the Deployment
-	err = clientset.AppsV1().Deployments("streaming").Delete(context.TODO(), deploymentName, metav1.DeleteOptions{})
+	err = clientset.AppsV1().Deployments("streaming").Delete(context.TODO(), serviceName+"-service", metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 
 	// Delete the Service
-	err = clientset.CoreV1().Services("streaming").Delete(context.TODO(), serviceName, metav1.DeleteOptions{})
+	err = clientset.CoreV1().Services("streaming").Delete(context.TODO(), serviceName+"-service", metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}

@@ -100,7 +100,7 @@ func HandlerUpload() gin.HandlerFunc {
 			return
 		}
 
-		err = HandlerConfig(dir, model.ModelID, DockerURL)
+		err = HandlerConfig(dir, model.ModelID, DockerURL, reqModel.Model_Version)
 		if err != nil {
 			c.JSON(400, gin.H{"message": "Cannot create config"})
 			return
@@ -123,7 +123,7 @@ func HandlerUpload() gin.HandlerFunc {
 	}
 }
 
-func HandlerConfig(dir string, modelID primitive.ObjectID, dockerImageID string) error {
+func HandlerConfig(dir string, modelID primitive.ObjectID, dockerImageID string, version string) error {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
 	// Read Config file
@@ -149,6 +149,7 @@ func HandlerConfig(dir string, modelID primitive.ObjectID, dockerImageID string)
 	modelInputs.ModelID = modelID
 	modelInputs.DockerImageID = dockerImageID
 	modelInputs.InputDetail = InputDetail
+	modelInputs.Version = version
 	// Insert Input Detail to DB
 	_, err = modelCollectionInputDetail.InsertOne(ctx, modelInputs)
 
@@ -309,7 +310,8 @@ func GetModelByID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		id := c.Param("model_id")
-		docker_image := c.Param("docker_image_id")
+		// docker_image := c.Param("docker_image_id")
+		select_version := c.Param("version")
 		modelID, _ := primitive.ObjectIDFromHex(id)
 		var foundModel models.ModelData
 
@@ -322,6 +324,7 @@ func GetModelByID() gin.HandlerFunc {
 
 		var foundImages []models.ModelImage
 		var dockerImagesID []string
+		var versions []string
 		findOptions := options.Find()
 
 		cur, err := modelCollectionImage.Find(context.TODO(), bson.M{"model_id": modelID}, findOptions)
@@ -353,13 +356,20 @@ func GetModelByID() gin.HandlerFunc {
 
 		for i := 0; i < len(foundImages); i++ {
 			dockerImagesID = append(dockerImagesID, foundImages[i].DockerImageID)
+			versions = append(versions, foundImages[i].ModelVersion)
 		}
 
+		for i, j := 0, len(foundImages)-1; i < j; i, j = i+1, j-1 {
+			foundImages[i], foundImages[j] = foundImages[j], foundImages[i]
+		}
+
+		fmt.Println(versions)
 		var modelInput models.ModelInput
-		if docker_image == "/" {
-			err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": foundImages[0].DockerImageID}).Decode(&modelInput)
+		if select_version == "/" {
+			err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "version": foundImages[0].ModelVersion}).Decode(&modelInput)
 		} else {
-			err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": docker_image[1:]}).Decode(&modelInput)
+			err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "version": select_version[1:]}).Decode(&modelInput)
+			// err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": docker_image[1:]}).Decode(&modelInput)
 		}
 
 		defer cancel()
@@ -379,6 +389,7 @@ func GetModelByID() gin.HandlerFunc {
 		modelTransfer.CreatedAt = foundModel.CreatedAt
 		modelTransfer.OutputType = foundModel.OutputType
 		modelTransfer.DockerImageID = dockerImagesID
+		modelTransfer.Version = versions
 		modelTransfer.InputDetail = modelInput.InputDetail
 
 		c.JSON(200, modelTransfer)
@@ -434,7 +445,7 @@ func HandlerPredict() gin.HandlerFunc {
 
 		var modelInput models.ModelInput
 
-		err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": inputData.DockerImageID}).Decode(&modelInput)
+		err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "version": inputData.Version}).Decode(&modelInput)
 		defer cancel()
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -450,14 +461,6 @@ func HandlerPredict() gin.HandlerFunc {
 						c.JSON(400, gin.H{"error": "Wrong Input Type"})
 						return
 					}
-					// if inputData.DataInputs[i].Type == "image" {
-					// 	str := fmt.Sprintf("%v", inputData.DataInputs[i].Data)
-					// 	var x interface{} = uploadPath + "/" + str
-					// 	// interface{uploadPath + inputData.DataInputs[i].Data}
-					// 	inputData.DataInputs[i].Data = x
-					// 	str = fmt.Sprintf("%v", inputData.DataInputs[i].Data)
-
-					// }
 					predictBody["input"][modelInput.InputDetail[j].Name] = inputData.DataInputs[i].Data
 					break
 				}
@@ -465,7 +468,7 @@ func HandlerPredict() gin.HandlerFunc {
 		}
 
 		var modelImage models.ModelImage
-		err = modelCollectionImage.FindOne(ctx, bson.M{"docker_image_id": inputData.DockerImageID}).Decode(&modelImage)
+		err = modelCollectionImage.FindOne(ctx, bson.M{"model_id": modelID, "model_version": inputData.Version}).Decode(&modelImage)
 		defer cancel()
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -481,8 +484,8 @@ func HandlerPredict() gin.HandlerFunc {
 		}
 
 		var modelInputData models.ModelInputData
-		modelInputData.DockerImageID = inputData.DockerImageID
 		modelInputData.DataInputs = inputData.DataInputs
+		modelInputData.Version = modelImage.ModelVersion
 
 		defer cancel()
 		if err != nil {
@@ -594,6 +597,7 @@ func HandlerPredict() gin.HandlerFunc {
 		modelOutputData.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		modelOutputData.ModelID = modelID
 		modelOutputData.ModelInputData = modelInputData
+		modelOutputData.Version = modelImage.ModelVersion
 
 		_, err = modelCollectionOutput.InsertOne(ctx, modelOutputData)
 		if err != nil {
@@ -627,7 +631,7 @@ func HandlerPredictStream() gin.HandlerFunc {
 
 		var modelInput models.ModelInput
 
-		err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "docker_image_id": inputData.DockerImageID}).Decode(&modelInput)
+		err = modelCollectionInputDetail.FindOne(ctx, bson.M{"model_id": modelID, "version": inputData.Version}).Decode(&modelInput)
 		defer cancel()
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -658,7 +662,7 @@ func HandlerPredictStream() gin.HandlerFunc {
 		}
 
 		var modelImage models.ModelImage
-		err = modelCollectionImage.FindOne(ctx, bson.M{"docker_image_id": inputData.DockerImageID}).Decode(&modelImage)
+		err = modelCollectionImage.FindOne(ctx, bson.M{"model_id": modelID, "model_version": inputData.Version}).Decode(&modelImage)
 		defer cancel()
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -672,10 +676,6 @@ func HandlerPredictStream() gin.HandlerFunc {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
-
-		var modelInputData models.ModelInputData
-		modelInputData.DockerImageID = inputData.DockerImageID
-		modelInputData.DataInputs = inputData.DataInputs
 
 		defer cancel()
 		if err != nil {
@@ -870,19 +870,19 @@ func HandlerUpdateModel() gin.HandlerFunc {
 			return
 		}
 
-		err = HandlerConfig(dir, model.ModelID, DockerURL)
+		err = HandlerConfig(dir, model.ModelID, DockerURL, reqModel.Model_Version)
 		if err != nil {
 			c.JSON(400, gin.H{"message": "Cannot create config"})
 			return
 		}
 
-		err = os.RemoveAll("repos/" + model.Name)
+		err = os.RemoveAll("repos/" + reqModel.Name)
 		if err != nil {
 			log.Fatal(err)
 		}
 		modelVersion := strings.ReplaceAll(reqModel.Model_Version, ".", "-")
-		serviceName := strings.ToLower(model.Name) + modelVersion
-		err = HandlerDeployKube(model.Registry, ImageID, strings.ToLower(model.Name), serviceName)
+		serviceName := strings.ToLower(reqModel.Name) + modelVersion
+		err = HandlerDeployKube(model.Registry, ImageID, strings.ToLower(reqModel.Name), serviceName)
 
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Error during handling kubernetes "})
@@ -899,9 +899,17 @@ func HandlerDeleteModel() gin.HandlerFunc {
 		id := c.Param("model_id")
 
 		modelID, _ := primitive.ObjectIDFromHex(id)
+		var foundModel models.ModelData
+
+		err := modelCollection.FindOne(context.TODO(), bson.M{"model_id": modelID}).Decode(&foundModel)
+
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Model ID is invalid"})
+			return
+		}
 
 		var deletedDocument bson.M
-		err := modelCollection.FindOneAndDelete(context.TODO(), bson.M{"model_id": modelID}).Decode(&deletedDocument)
+		err = modelCollection.FindOneAndDelete(context.TODO(), bson.M{"model_id": modelID}).Decode(&deletedDocument)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				c.JSON(200, gin.H{"message": "No matched document"})
@@ -937,15 +945,11 @@ func HandlerDeleteModel() gin.HandlerFunc {
 		//Close the cursor once finished
 		cur.Close(context.TODO())
 		for i := 0; i < len(foundImages); i++ {
-			lastSlashIndex := strings.LastIndex(foundImages[i].DockerImageID, "/")
-			if lastSlashIndex >= 0 {
-				imageName := strings.Replace(foundImages[i].DockerImageID[lastSlashIndex+1:], ":", "", 1)
-				imageName = strings.ReplaceAll(imageName, ".", "-")
-				imageName = imageName + "-service"
-				err := helper.DeleteDeploymentAndService(imageName, imageName)
-				if err != nil {
-					fmt.Print(err)
-				}
+			modelVersion := strings.ReplaceAll(foundImages[i].ModelVersion, ".", "-")
+			serviceName := strings.ToLower(foundModel.Name) + modelVersion
+			err := helper.DeleteDeploymentAndService(serviceName, serviceName)
+			if err != nil {
+				fmt.Print(err)
 			}
 
 			_, err = modelCollectionPod.DeleteOne(context.TODO(), bson.M{"image_id": foundImages[i].ImageID})

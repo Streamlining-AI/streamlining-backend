@@ -25,7 +25,7 @@ func main() {
 	router.Use(gin.Logger())
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"https://localhost:3000"},
+		AllowOrigins:     []string{"http://103.153.118.69:30003"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "OPTIONS", "DELETE"},
 		AllowHeaders:     []string{"Origin", "Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},

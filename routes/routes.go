@@ -14,13 +14,13 @@ func UserRoutes(incomingRoutes *gin.Engine) {
 }
 
 func ModelRoutes(incomingRoutes *gin.Engine) {
-	incomingRoutes.GET("/model/:model_id/*docker_image_id", controller.GetModelByID())
+	incomingRoutes.GET("/model/:model_id/*version", controller.GetModelByID())
 	incomingRoutes.GET("/model/input", controller.GetModelInputByDockerImageID())
 	incomingRoutes.GET("/model/", controller.GetAllModel())
 	incomingRoutes.GET("/users/model/:userid", controller.GetAllOwnerModel())
 	incomingRoutes.POST("/predict/", controller.HandlerPredict())
 	incomingRoutes.POST("/stream/", controller.HandlerPredictStream())
-	incomingRoutes.GET("/model/output/:model_id", controller.GetAllOutputHistory())
+	incomingRoutes.GET("/model/output/:model_id/*version", controller.GetAllOutputHistory())
 	incomingRoutes.DELETE("/model/:model_id", controller.HandlerDeleteModel())
 	incomingRoutes.POST("/model/", controller.HandlerUpload())
 	incomingRoutes.POST("/model/report", controller.HandlerReportModel())
