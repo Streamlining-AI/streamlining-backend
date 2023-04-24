@@ -17,6 +17,7 @@ func ModelRoutes(incomingRoutes *gin.Engine) {
 	incomingRoutes.GET("/model/:model_id/*docker_image_id", controller.GetModelByID())
 	incomingRoutes.GET("/model/input", controller.GetModelInputByDockerImageID())
 	incomingRoutes.GET("/model/", controller.GetAllModel())
+	incomingRoutes.GET("/users/model/:userid", controller.GetAllOwnerModel())
 	incomingRoutes.POST("/predict/", controller.HandlerPredict())
 	incomingRoutes.POST("/stream/", controller.HandlerPredictStream())
 	incomingRoutes.GET("/model/output/:model_id", controller.GetAllOutputHistory())
