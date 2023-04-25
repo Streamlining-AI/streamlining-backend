@@ -359,9 +359,9 @@ func GetModelByID() gin.HandlerFunc {
 			versions = append(versions, foundImages[i].ModelVersion)
 		}
 
-		for i, j := 0, len(foundImages)-1; i < j; i, j = i+1, j-1 {
-			foundImages[i], foundImages[j] = foundImages[j], foundImages[i]
-		}
+		// for i, j := 0, len(foundImages)-1; i < j; i, j = i+1, j-1 {
+		// 	foundImages[i], foundImages[j] = foundImages[j], foundImages[i]
+		// }
 
 		fmt.Println(versions)
 		var modelInput models.ModelInput
