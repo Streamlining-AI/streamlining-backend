@@ -16,7 +16,7 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
-const maxUploadSize = 2 * 1024 * 1024 // 2 mb
+const maxUploadSize = 8 * 1024 * 1024 // 8 mb
 
 var minioClient *minio.Client = database.MinioClient
 

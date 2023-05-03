@@ -207,7 +207,23 @@ func CreateDeployment(name, serviceName, imageURL string) error {
 					},
 				},
 				Spec: v1.PodSpec{
-					NodeName: "prism-2",
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/hostname",
+												Operator: v1.NodeSelectorOpIn,
+												Values:   []string{"prism-6", "prism-1", "prism-2", "prism-3", "prism-4"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
 					Containers: []v1.Container{
 						{
 							Name:  name,

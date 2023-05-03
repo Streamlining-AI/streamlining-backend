@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"log"
@@ -533,31 +535,132 @@ func HandlerPredict() gin.HandlerFunc {
 		var predictResp PredictOutput
 		var predictRespAtt PredictOutputWithAttribute
 		var imgBase64 string
+		var fileName = RandToken(12)
+		var imgBytes []byte
+		var img image.Image
+		buf := new(bytes.Buffer)
+
 		if model.OutputType == "no" {
 			json.Unmarshal(respbody, &predictResp)
-			imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/png;base64,")
+			fmt.Printf("%+v\n", predictResp)
+
+			if strings.Contains(predictResp.Output.(string), "data:image/png;base64,") {
+				fmt.Println("String contains 'data:image/png;base64,'")
+				imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/png;base64,")
+				fileName = fileName + ".png"
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = png.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = png.Encode(buf, img)
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else if strings.Contains(predictResp.Output.(string), "data:image/jpeg;base64,") {
+				fmt.Println("String contains 'data:image/jpeg;base64,'")
+				imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/jpeg;base64,")
+				fileName = fileName + ".jpeg"
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = jpeg.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = jpeg.Encode(buf, img, &jpeg.Options{})
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				startIdx := strings.Index(predictResp.Output.(string), "data:image/") + len("data:image/")
+				endIdx := strings.Index(predictResp.Output.(string)[startIdx:], ";")
+				if endIdx == -1 {
+					endIdx = len(predictResp.Output.(string)) - startIdx
+				}
+				imgFormat := predictResp.Output.(string)[startIdx : startIdx+endIdx]
+				imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/"+imgFormat+";base64,")
+				fileName = fileName + imgFormat
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = png.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = png.Encode(buf, img)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
 		} else {
 			json.Unmarshal(respbody, &predictRespAtt)
-			imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,")
+			fmt.Printf("%+v\n", predictResp)
+
+			if strings.Contains(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,") {
+				fmt.Println("String contains 'data:image/png;base64,'")
+				imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,")
+				fileName = fileName + ".png"
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = png.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = png.Encode(buf, img)
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else if strings.Contains(predictRespAtt.Output[model.OutputType].(string), "data:image/jpeg;base64,") {
+				fmt.Println("String contains 'data:image/jpeg;base64,'")
+				imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/jpeg;base64,")
+				fileName = fileName + ".jpeg"
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = jpeg.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = jpeg.Encode(buf, img, &jpeg.Options{})
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				startIdx := strings.Index(predictRespAtt.Output[model.OutputType].(string), "data:image/") + len("data:image/")
+				endIdx := strings.Index(predictRespAtt.Output[model.OutputType].(string)[startIdx:], ";")
+				if endIdx == -1 {
+					endIdx = len(predictRespAtt.Output[model.OutputType].(string)) - startIdx
+				}
+				imgFormat := predictRespAtt.Output[model.OutputType].(string)[startIdx : startIdx+endIdx]
+				imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/"+imgFormat+";base64,")
+				fileName = fileName + imgFormat
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = png.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = png.Encode(buf, img)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+			// imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,")
 		}
-		imgBytes, err := base64.StdEncoding.DecodeString(imgBase64)
-		if err != nil {
-			log.Fatal(err)
-		}
-		img, err := png.Decode(bytes.NewReader(imgBytes))
-		if err != nil {
-			log.Fatal(err)
-		}
+
 		// Now you can use the decoded image object as needed
 		// For example, you can encode it as a PNG and write it to a file
-
-		var fileName = RandToken(12) + ".png"
-
-		buf := new(bytes.Buffer)
-		err = png.Encode(buf, img)
-		if err != nil {
-			log.Fatal(err)
-		}
 
 		var minioClient *minio.Client = database.MinioClient
 		// Upload the PNG image to the specified bucket and object
@@ -724,29 +827,128 @@ func HandlerPredictStream() gin.HandlerFunc {
 		var predictResp PredictOutput
 		var predictRespAtt PredictOutputWithAttribute
 		var imgBase64 string
+		var fileName = RandToken(12)
+		var imgBytes []byte
+		var img image.Image
+		buf := new(bytes.Buffer)
+
 		if model.OutputType == "no" {
 			json.Unmarshal(respbody, &predictResp)
-			imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/png;base64,")
+			fmt.Printf("%+v\n", predictResp)
+
+			if strings.Contains(predictResp.Output.(string), "data:image/png;base64,") {
+				fmt.Println("String contains 'data:image/png;base64,'")
+				imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/png;base64,")
+				fileName = fileName + ".png"
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = png.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = png.Encode(buf, img)
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else if strings.Contains(predictResp.Output.(string), "data:image/jpeg;base64,") {
+				fmt.Println("String contains 'data:image/jpeg;base64,'")
+				imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/jpeg;base64,")
+				fileName = fileName + ".jpeg"
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = jpeg.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = jpeg.Encode(buf, img, &jpeg.Options{})
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				startIdx := strings.Index(predictResp.Output.(string), "data:image/") + len("data:image/")
+				endIdx := strings.Index(predictResp.Output.(string)[startIdx:], ";")
+				if endIdx == -1 {
+					endIdx = len(predictResp.Output.(string)) - startIdx
+				}
+				imgFormat := predictResp.Output.(string)[startIdx : startIdx+endIdx]
+				imgBase64 = strings.TrimPrefix(predictResp.Output.(string), "data:image/"+imgFormat+";base64,")
+				fileName = fileName + imgFormat
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = png.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = png.Encode(buf, img)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
 		} else {
 			json.Unmarshal(respbody, &predictRespAtt)
-			imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,")
-		}
+			fmt.Printf("%+v\n", predictResp)
 
-		imgBytes, err := base64.StdEncoding.DecodeString(imgBase64)
-		if err != nil {
-			log.Fatal(err)
-		}
-		img, err := png.Decode(bytes.NewReader(imgBytes))
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		var fileName = RandToken(12) + ".png"
-
-		buf := new(bytes.Buffer)
-		err = png.Encode(buf, img)
-		if err != nil {
-			log.Fatal(err)
+			if strings.Contains(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,") {
+				fmt.Println("String contains 'data:image/png;base64,'")
+				imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,")
+				fileName = fileName + ".png"
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = png.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = png.Encode(buf, img)
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else if strings.Contains(predictRespAtt.Output[model.OutputType].(string), "data:image/jpeg;base64,") {
+				fmt.Println("String contains 'data:image/jpeg;base64,'")
+				imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/jpeg;base64,")
+				fileName = fileName + ".jpeg"
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = jpeg.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = jpeg.Encode(buf, img, &jpeg.Options{})
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				startIdx := strings.Index(predictRespAtt.Output[model.OutputType].(string), "data:image/") + len("data:image/")
+				endIdx := strings.Index(predictRespAtt.Output[model.OutputType].(string)[startIdx:], ";")
+				if endIdx == -1 {
+					endIdx = len(predictRespAtt.Output[model.OutputType].(string)) - startIdx
+				}
+				imgFormat := predictRespAtt.Output[model.OutputType].(string)[startIdx : startIdx+endIdx]
+				imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/"+imgFormat+";base64,")
+				fileName = fileName + imgFormat
+				imgBytes, err = base64.StdEncoding.DecodeString(imgBase64)
+				if err != nil {
+					log.Fatal(err)
+				}
+				img, err = png.Decode(bytes.NewReader(imgBytes))
+				if err != nil {
+					log.Fatal(err)
+				}
+				err = png.Encode(buf, img)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+			// imgBase64 = strings.TrimPrefix(predictRespAtt.Output[model.OutputType].(string), "data:image/png;base64,")
 		}
 
 		var minioClient *minio.Client = database.MinioClient
@@ -841,7 +1043,7 @@ func HandlerUpdateModel() gin.HandlerFunc {
 		model.GithubURL = reqModel.GithubURL
 		model.Registry = reqModel.Registry
 		model.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		update := bson.D{{Key: "$set", Value: bson.D{{Key: "updated_at", Value: model.UpdatedAt}}}}
+		update := bson.D{{Key: "$set", Value: bson.D{{Key: "updated_at", Value: model.UpdatedAt}, {Key: "is_visible", Value: reqModel.IsVisible}}}}
 		_, err = modelCollection.UpdateByID(ctx, bson.M{"model_id": model.ModelID}, update)
 		defer cancel()
 		if err != nil {

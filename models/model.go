@@ -37,6 +37,7 @@ type ModelUpdateTransfer struct {
 	GithubCode    string `json:"github_code"`
 	Model_Version string `json:"model_version"`
 	Registry      string `json:"registry"`
+	IsVisible     bool   `json:"is_visible"`
 }
 
 type ModelDataTransfer struct {
